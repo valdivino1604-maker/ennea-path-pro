@@ -75,11 +75,212 @@ async function ensureSchema(env) {
       )
     `),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_results_participant_id ON results(participant_id)"),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_results_created_date ON results(created_date)")
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_results_created_date ON results(created_date)"),
+    env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id TEXT PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'master',
+        password_salt TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_date TEXT NOT NULL,
+        updated_date TEXT NOT NULL
+      )
+    `),
+    env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        id TEXT PRIMARY KEY,
+        admin_user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        created_date TEXT NOT NULL
+      )
+    `),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_sessions_token_hash ON admin_sessions(token_hash)")
   ]);
 
   schemaReady = true;
   return true;
+}
+
+function getCookie(request, name) {
+  const cookie = request.headers.get("cookie") || "";
+  const part = cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${name}=`));
+  return part ? decodeURIComponent(part.slice(name.length + 1)) : "";
+}
+
+function sessionCookie(token, maxAge = 60 * 60 * 24 * 7) {
+  return [
+    `ennea_admin_session=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "Secure",
+    "SameSite=Lax",
+    `Max-Age=${maxAge}`
+  ].join("; ");
+}
+
+async function sha256Hex(value) {
+  const data = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function passwordHash(password, salt) {
+  return sha256Hex(`${salt}:${password}`);
+}
+
+async function createAdminSession(env, adminUser) {
+  const token = `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+  const tokenHash = await sha256Hex(token);
+  const now = new Date();
+  const expires = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7).toISOString();
+
+  await env.DB.prepare(`
+    INSERT INTO admin_sessions (id, admin_user_id, token_hash, expires_at, created_date)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(makeId("session"), adminUser.id, tokenHash, expires, now.toISOString()).run();
+
+  return token;
+}
+
+function publicAdmin(adminUser) {
+  if (!adminUser) return null;
+  return {
+    id: adminUser.id,
+    full_name: adminUser.full_name,
+    email: adminUser.email,
+    role: adminUser.role
+  };
+}
+
+async function getAdminFromRequest(request, env) {
+  const token = getCookie(request, "ennea_admin_session");
+  if (!token) return null;
+
+  const tokenHash = await sha256Hex(token);
+  const row = await env.DB.prepare(`
+    SELECT admin_users.*
+    FROM admin_sessions
+    JOIN admin_users ON admin_users.id = admin_sessions.admin_user_id
+    WHERE admin_sessions.token_hash = ?
+      AND admin_sessions.expires_at > ?
+    LIMIT 1
+  `).bind(tokenHash, new Date().toISOString()).first();
+
+  return row || null;
+}
+
+async function setupStatus(env) {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM admin_users").first();
+  return json({ needs_setup: Number(row?.count || 0) === 0 });
+}
+
+async function setupAdmin(request, env) {
+  const countRow = await env.DB.prepare("SELECT COUNT(*) AS count FROM admin_users").first();
+  if (Number(countRow?.count || 0) > 0) {
+    return json({ error: "O acesso master ja foi criado." }, 409);
+  }
+
+  const data = await readJson(request);
+  const email = String(data.email || "").trim().toLowerCase();
+  const fullName = String(data.full_name || data.name || "Master").trim();
+  const password = String(data.password || "");
+
+  if (!email || !email.includes("@")) {
+    return json({ error: "Informe um e-mail valido." }, 400);
+  }
+  if (password.length < 6) {
+    return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
+  }
+
+  const now = new Date().toISOString();
+  const salt = crypto.randomUUID();
+  const adminUser = {
+    id: makeId("admin"),
+    full_name: fullName,
+    email,
+    role: "master",
+    password_salt: salt,
+    password_hash: await passwordHash(password, salt),
+    created_date: now,
+    updated_date: now
+  };
+
+  await env.DB.prepare(`
+    INSERT INTO admin_users (
+      id, full_name, email, role, password_salt, password_hash, created_date, updated_date
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    adminUser.id,
+    adminUser.full_name,
+    adminUser.email,
+    adminUser.role,
+    adminUser.password_salt,
+    adminUser.password_hash,
+    adminUser.created_date,
+    adminUser.updated_date
+  ).run();
+
+  const token = await createAdminSession(env, adminUser);
+  return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), {
+    status: 201,
+    headers: {
+      ...jsonHeaders,
+      "set-cookie": sessionCookie(token)
+    }
+  });
+}
+
+async function loginAdmin(request, env) {
+  const data = await readJson(request);
+  const email = String(data.email || "").trim().toLowerCase();
+  const password = String(data.password || "");
+
+  const adminUser = await env.DB.prepare("SELECT * FROM admin_users WHERE email = ? LIMIT 1").bind(email).first();
+  if (!adminUser) {
+    return json({ error: "E-mail ou senha invalidos." }, 401);
+  }
+
+  const hash = await passwordHash(password, adminUser.password_salt);
+  if (hash !== adminUser.password_hash) {
+    return json({ error: "E-mail ou senha invalidos." }, 401);
+  }
+
+  const token = await createAdminSession(env, adminUser);
+  return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), {
+    status: 200,
+    headers: {
+      ...jsonHeaders,
+      "set-cookie": sessionCookie(token)
+    }
+  });
+}
+
+async function currentAdmin(request, env) {
+  const adminUser = await getAdminFromRequest(request, env);
+  if (!adminUser) {
+    return json({ user: null, isAuthenticated: false }, 401);
+  }
+  return json({ user: publicAdmin(adminUser), isAuthenticated: true });
+}
+
+async function logoutAdmin(request, env) {
+  const token = getCookie(request, "ennea_admin_session");
+  if (token) {
+    const tokenHash = await sha256Hex(token);
+    await env.DB.prepare("DELETE FROM admin_sessions WHERE token_hash = ?").bind(tokenHash).run();
+  }
+
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: {
+      ...jsonHeaders,
+      "set-cookie": sessionCookie("", 0)
+    }
+  });
 }
 
 function requireDb(env) {
@@ -280,6 +481,26 @@ async function handleApi(request, env) {
 
   if (pathname === "/api/health") {
     return json({ ok: true, database: "D1" });
+  }
+
+  if (pathname === "/api/admin/setup-status" && method === "GET") {
+    return setupStatus(env);
+  }
+
+  if (pathname === "/api/admin/setup" && method === "POST") {
+    return setupAdmin(request, env);
+  }
+
+  if (pathname === "/api/admin/login" && method === "POST") {
+    return loginAdmin(request, env);
+  }
+
+  if (pathname === "/api/admin/me" && method === "GET") {
+    return currentAdmin(request, env);
+  }
+
+  if (pathname === "/api/admin/logout" && method === "POST") {
+    return logoutAdmin(request, env);
   }
 
   if (pathname === "/api/participants" && method === "POST") {

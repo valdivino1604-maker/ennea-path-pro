@@ -10,6 +10,8 @@ import Landing from '@/pages/Landing';
 import Register from '@/pages/Register';
 import Test from '@/pages/Test';
 import Results from '@/pages/Results';
+import AdminLogin from '@/pages/AdminLogin';
+import AdminSetup from '@/pages/AdminSetup';
 import Admin from '@/pages/Admin';
 import TeamMapping from '@/pages/TeamMapping';
 import Compatibility from '@/pages/Compatibility';
@@ -30,6 +32,8 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/test/:participantId" element={<Test />} />
             <Route path="/results/:resultId" element={<Results />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/setup" element={<AdminSetup />} />
             <Route path="/admin" element={<AdminGuard><Admin /></AdminGuard>} />
             <Route path="/admin/team-mapping" element={<AdminGuard><TeamMapping /></AdminGuard>} />
             <Route path="/admin/compatibility" element={<AdminGuard><Compatibility /></AdminGuard>} />

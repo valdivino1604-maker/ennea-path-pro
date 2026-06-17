@@ -1,10 +1,9 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 
-const ADMIN_ID = "6a31ede4977440ad85d90422"; // Valdivino
-
 export default function AdminGuard({ children }) {
+  const location = useLocation();
   const { user, isAuthenticated, isLoadingAuth, authChecked } = useAuth();
 
   if (isLoadingAuth || !authChecked) {
@@ -15,8 +14,8 @@ export default function AdminGuard({ children }) {
     );
   }
 
-  if (!isAuthenticated || !user || user.id !== ADMIN_ID) {
-    return <Navigate to="/" replace />;
+  if (!isAuthenticated || !user || !["admin", "master"].includes(user.role)) {
+    return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
 
   return children;

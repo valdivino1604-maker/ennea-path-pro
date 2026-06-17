@@ -26,7 +26,7 @@ const NAV_ITEMS = [
 
 export default function Admin() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -119,11 +119,17 @@ export default function Admin() {
             <Calendar className="w-3.5 h-3.5" />
             <span>01/01/2024 - 31/12/2024</span>
           </div>
-          <Link to="/">
-            <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-              <LogOut className="w-4 h-4" /> Sair
-            </Button>
-          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 text-muted-foreground"
+            onClick={async () => {
+              await logout();
+              navigate("/admin/login");
+            }}
+          >
+            <LogOut className="w-4 h-4" /> Sair
+          </Button>
         </header>
 
         <div className="p-4 sm:p-6 space-y-6">

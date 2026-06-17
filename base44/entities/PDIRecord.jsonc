@@ -1,0 +1,56 @@
+{
+  "name": "PDIRecord",
+  "type": "object",
+  "properties": {
+    "participant_name": {
+      "type": "string",
+      "title": "Nome do Participante"
+    },
+    "participant_email": {
+      "type": "string",
+      "title": "E-mail do Participante"
+    },
+    "manager_email": {
+      "type": "string",
+      "title": "E-mail do Gestor"
+    },
+    "result_id": {
+      "type": "string",
+      "title": "ID do Resultado"
+    },
+    "dominant_type": {
+      "type": "number",
+      "title": "Tipo Dominante"
+    },
+    "dominant_type_name": {
+      "type": "string",
+      "title": "Nome do Tipo"
+    },
+    "wing": {
+      "type": "number",
+      "title": "Asa"
+    },
+    "confidence_level": {
+      "type": "number",
+      "title": "Confian\u00e7a"
+    },
+    "pillars": {
+      "type": "string",
+      "title": "Pilares do PDI (JSON)"
+    },
+    "email_sent": {
+      "type": "boolean",
+      "title": "E-mail Enviado",
+      "default": false
+    },
+    "email_error": {
+      "type": "string",
+      "title": "Erro no envio"
+    }
+  },
+  "required": [
+    "participant_name",
+    "participant_email",
+    "result_id"
+  ]
+}

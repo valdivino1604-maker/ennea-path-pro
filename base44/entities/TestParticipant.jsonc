@@ -1,0 +1,66 @@
+{
+  "name": "TestParticipant",
+  "type": "object",
+  "properties": {
+    "full_name": {
+      "type": "string",
+      "title": "Nome Completo"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "title": "E-mail"
+    },
+    "phone": {
+      "type": "string",
+      "title": "Telefone"
+    },
+    "company": {
+      "type": "string",
+      "title": "Empresa"
+    },
+    "role": {
+      "type": "string",
+      "title": "Cargo"
+    },
+    "birth_date": {
+      "type": "string",
+      "format": "date",
+      "title": "Data de Nascimento"
+    },
+    "gender": {
+      "type": "string",
+      "enum": [
+        "Masculino",
+        "Feminino",
+        "Outro",
+        "Prefiro n\u00e3o informar"
+      ],
+      "title": "Sexo"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "basico",
+        "premium"
+      ],
+      "default": "basico",
+      "title": "Plano"
+    },
+    "answers": {
+      "type": "string",
+      "title": "Respostas JSON (progresso)"
+    },
+    "current_index": {
+      "type": "number",
+      "title": "\u00cdndice atual",
+      "default": 0
+    }
+  },
+  "required": [
+    "full_name",
+    "email",
+    "phone",
+    "birth_date"
+  ]
+}

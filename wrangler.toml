@@ -8,10 +8,7 @@ binding = "ASSETS"
 run_worker_first = true
 not_found_handling = "single-page-application"
 
-# Depois de criar o banco no Cloudflare D1, adicione o binding abaixo
-# com o database_id real. O nome do binding precisa ser DB.
-#
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "ennea-path-pro-db"
-# database_id = "COLE_AQUI_O_ID_DO_D1"
+[[d1_databases]]
+binding = "DB"
+database_name = "ennea-path-pro-db"
+database_id = "4fc97331-5bcf-433d-baa7-6f5ae13bc1f1"

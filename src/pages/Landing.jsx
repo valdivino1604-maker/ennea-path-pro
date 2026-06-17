@@ -1,267 +1,146 @@
-import React, { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import React from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Brain, BarChart3, Users, Sparkles, Mail, Lock, Loader2, LogIn } from "lucide-react";
+import { ArrowRight, BarChart3, Brain, CheckCircle2, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { TYPE_COLORS } from "@/lib/enneagramData";
-import { useAuth } from "@/lib/AuthContext";
-import { base44 } from "@/api/base44Client";
-import GoogleIcon from "@/components/GoogleIcon";
 
 const types = [
-  { n: 1, name: "Perfeccionista", emoji: "⚖️" },
-  { n: 2, name: "Prestativo", emoji: "💝" },
-  { n: 3, name: "Realizador", emoji: "🏆" },
-  { n: 4, name: "Individualista", emoji: "🎨" },
-  { n: 5, name: "Investigador", emoji: "🔬" },
-  { n: 6, name: "Leal", emoji: "🛡️" },
-  { n: 7, name: "Entusiasta", emoji: "🎉" },
-  { n: 8, name: "Desafiador", emoji: "💪" },
-  { n: 9, name: "Pacificador", emoji: "☮️" }
+  { n: 1, name: "Perfeccionista" },
+  { n: 2, name: "Prestativo" },
+  { n: 3, name: "Realizador" },
+  { n: 4, name: "Individualista" },
+  { n: 5, name: "Investigador" },
+  { n: 6, name: "Leal" },
+  { n: 7, name: "Entusiasta" },
+  { n: 8, name: "Desafiador" },
+  { n: 9, name: "Pacificador" }
 ];
 
 const benefits = [
-  { icon: Brain, title: "Autoconhecimento Profundo", desc: "Descubra motivações, medos e padrões de comportamento enraizados." },
-  { icon: BarChart3, title: "Análise Detalhada", desc: "Gráficos, rankings e recomendações personalizadas para seu crescimento." },
-  { icon: Users, title: "Relações Aprimoradas", desc: "Entenda como você se conecta e melhore todas as suas relações." },
+  {
+    icon: Brain,
+    title: "Autoconhecimento",
+    desc: "Identifique motivacoes, medos, pontos fortes e padroes de comportamento."
+  },
+  {
+    icon: BarChart3,
+    title: "Resultado instantaneo",
+    desc: "Veja o tipo dominante, asa, ranking dos tipos e nivel de aderencia."
+  },
+  {
+    icon: Users,
+    title: "Lideranca e equipes",
+    desc: "Use o resultado para melhorar comunicacao, relacoes e desenvolvimento profissional."
+  }
 ];
 
-function LoginGate() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await base44.auth.loginViaEmailPassword(email, password);
-      window.location.href = "/";
-    } catch (err) {
-      setError(err.message || "E-mail ou senha inválidos.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogle = () => {
-    base44.auth.loginWithProvider("google", "/");
-  };
-
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(120,80,255,0.12),transparent_50%)]" />
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md relative z-10"
-      >
-        <div className="bg-card border border-border rounded-2xl p-6 sm:p-8">
-          <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center mx-auto mb-4">
-              <LogIn className="w-6 h-6 text-primary" />
-            </div>
-            <h1 className="font-display text-2xl font-bold text-foreground">Diagnóstico de Liderança</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Entre ou crie sua conta para continuar</p>
-          </div>
-
-          <Button
-            variant="outline"
-            className="w-full h-12 text-sm font-medium mb-5"
-            onClick={handleGoogle}
-          >
-            <GoogleIcon className="w-5 h-5 mr-2" />
-            Entrar com Google
-          </Button>
-
-          <div className="relative mb-5">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-3 text-muted-foreground">ou com e-mail</span>
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs text-muted-foreground">E-mail</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input id="email" type="email" autoComplete="email" placeholder="seu@email.com" value={email} onChange={e => setEmail(e.target.value)} className="pl-10 h-11 bg-background" required />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-xs text-muted-foreground">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input id="password" type="password" autoComplete="current-password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} className="pl-10 h-11 bg-background" required />
-              </div>
-            </div>
-            <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
-              {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Entrando...</> : "Entrar"}
-            </Button>
-          </form>
-        </div>
-
-        <p className="text-center mt-6 text-[11px] text-muted-foreground">
-          Ao entrar, você concorda com nossos Termos de Uso e Política de Privacidade.
-        </p>
-      </motion.div>
-    </div>
-  );
-}
-
-const ADMIN_ID = "6a31ede4977440ad85d90422"; // Valdivino
-
 export default function Landing() {
-  const { user, isAuthenticated, isLoadingAuth } = useAuth();
-
-  if (isLoadingAuth) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <LoginGate />;
-  }
-
-  // Admin goes straight to dashboard
-  if (user?.id === ADMIN_ID) {
-    return <Navigate to="/admin" replace />;
-  }
-
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(120,80,255,0.15),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(100,200,200,0.08),transparent_40%)]" />
-        <div className="relative max-w-6xl mx-auto px-4 pt-20 pb-24 sm:pt-32 sm:pb-32">
+      <section className="border-b border-border">
+        <div className="max-w-6xl mx-auto px-4 py-16 sm:py-24">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-            className="text-center"
+            transition={{ duration: 0.5 }}
+            className="max-w-3xl"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/15 border border-primary/20 text-primary text-sm font-medium mb-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
-              Teste Profissional de Eneagrama
+              Teste profissional de Eneagrama
             </div>
-            <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-foreground tracking-tight leading-tight">
-              Diagnóstico de <span className="text-primary">Liderança e Equipes</span>
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight">
+              Diagnostico de Lideranca e Equipes
             </h1>
-            <p className="mt-6 text-base sm:text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
-              Descubra seu Perfil de Personalidade
+            <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-2xl leading-relaxed">
+              Descubra seu perfil comportamental, pontos fortes e caminhos de desenvolvimento sem precisar entrar pelo Base44.
             </p>
-            <p className="text-sm text-muted-foreground/70 max-w-md mx-auto mt-2">
-              Uma análise profunda para autoconhecimento e desenvolvimento pessoal e profissional.
-            </p>
-            <div className="mt-10">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:items-center">
               <Link to="/register">
-                <Button size="lg" className="text-base px-10 py-6 rounded-xl gap-2 font-semibold shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all bg-primary hover:bg-primary/90">
-                  Iniciar Teste <ArrowRight className="w-5 h-5" />
+                <Button size="lg" className="text-base px-8 py-6 rounded-xl gap-2 font-semibold">
+                  Iniciar teste <ArrowRight className="w-5 h-5" />
                 </Button>
               </Link>
+              <span className="text-xs text-muted-foreground inline-flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                90 perguntas, resultado no final
+              </span>
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              90 perguntas · ~15 minutos · Resultado instantâneo
-            </p>
           </motion.div>
         </div>
       </section>
 
-      {/* 9 Types Grid */}
-      <section className="py-16 sm:py-20">
+      <section className="py-14 sm:py-18">
         <div className="max-w-6xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-10"
-          >
-            <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground">Os 9 Tipos do Eneagrama</h2>
-            <p className="mt-3 text-muted-foreground">Cada tipo representa uma perspectiva única sobre o mundo.</p>
-          </motion.div>
-          <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-9 gap-3">
-            {types.map((t, i) => (
-              <motion.div
-                key={t.n}
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.04 }}
-                className="flex flex-col items-center p-4 rounded-2xl bg-card border border-border hover:border-white/10 hover:bg-white/[0.04] transition-all cursor-default"
-              >
-                <span className="text-2xl sm:text-3xl mb-2">{t.emoji}</span>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-white" style={{ backgroundColor: TYPE_COLORS[t.n] }}>
-                  Tipo {t.n}
-                </span>
-                <span className="text-[11px] text-muted-foreground text-center mt-1">{t.name}</span>
-              </motion.div>
-            ))}
+          <div className="mb-8">
+            <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Os 9 tipos do Eneagrama</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Cada tipo mostra uma forma diferente de perceber, decidir e liderar.</p>
           </div>
-        </div>
-      </section>
-
-      {/* Benefits */}
-      <section className="py-16 sm:py-20">
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground">Por que fazer o teste?</h2>
-          </div>
-          <div className="grid sm:grid-cols-3 gap-5">
-            {benefits.map((b, i) => (
+          <div className="grid grid-cols-3 md:grid-cols-9 gap-3">
+            {types.map((type, index) => (
               <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
+                key={type.n}
+                initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="p-6 rounded-2xl bg-card border border-border hover:border-white/10 transition-all"
+                transition={{ delay: index * 0.03 }}
+                className="bg-card border border-border rounded-xl p-3 text-center"
               >
-                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <b.icon className="w-5 h-5 text-primary" />
+                <div
+                  className="w-9 h-9 rounded-full mx-auto mb-2 flex items-center justify-center text-white text-sm font-bold"
+                  style={{ backgroundColor: TYPE_COLORS[type.n] }}
+                >
+                  {type.n}
                 </div>
-                <h3 className="font-heading text-base font-semibold text-foreground">{b.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">{type.name}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 sm:py-24">
-        <div className="max-w-2xl mx-auto px-4 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
-            <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground">Pronto para se descobrir?</h2>
-            <p className="mt-4 text-muted-foreground">O teste leva aproximadamente 15 minutos. Ao final, você receberá uma análise completa do seu perfil.</p>
-            <Link to="/register">
-              <Button size="lg" className="mt-8 text-base px-10 py-6 rounded-xl gap-2 font-semibold shadow-lg shadow-primary/30">
-                Começar Agora <ArrowRight className="w-5 h-5" />
-              </Button>
-            </Link>
-          </motion.div>
+      <section className="py-14 border-t border-border">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="grid sm:grid-cols-3 gap-4">
+            {benefits.map((benefit, index) => (
+              <motion.div
+                key={benefit.title}
+                initial={{ opacity: 0, y: 18 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.08 }}
+                className="bg-card border border-border rounded-xl p-5"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <benefit.icon className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="font-heading text-sm font-semibold text-foreground">{benefit.title}</h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{benefit.desc}</p>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
+      <section className="py-16 border-t border-border">
+        <div className="max-w-2xl mx-auto px-4 text-center">
+          <h2 className="font-display text-3xl font-bold text-foreground">Pronto para comecar?</h2>
+          <p className="mt-3 text-sm text-muted-foreground">
+            O cadastro e as respostas ficam salvos neste navegador para o app funcionar fora da Base44.
+          </p>
+          <Link to="/register">
+            <Button size="lg" className="mt-7 text-base px-8 py-6 rounded-xl gap-2 font-semibold">
+              Comecar agora <ArrowRight className="w-5 h-5" />
+            </Button>
+          </Link>
+        </div>
+      </section>
+
       <footer className="border-t border-border py-8">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="font-display text-lg font-semibold text-foreground">Diagnóstico de Liderança e Equipes</p>
-          <p className="mt-1 text-sm text-muted-foreground">Plataforma profissional de diagnóstico comportamental</p>
+          <p className="font-display text-lg font-semibold text-foreground">Diagnostico de Lideranca e Equipes</p>
+          <p className="mt-1 text-sm text-muted-foreground">Aplicativo publicado fora da Base44</p>
         </div>
       </footer>
     </div>

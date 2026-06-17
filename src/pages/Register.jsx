@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { base44 } from "@/api/base44Client";
+import { createParticipant } from "@/lib/localStore";
 import { Link } from "react-router-dom";
 
 export default function Register() {
@@ -32,7 +32,7 @@ export default function Register() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const participant = await base44.entities.TestParticipant.create(form);
+      const participant = createParticipant(form);
       navigate(`/test/${participant.id}`);
     } catch (err) {
       setErrors({ general: "Erro ao cadastrar. Tente novamente." });

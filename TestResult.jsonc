@@ -1,0 +1,80 @@
+{
+  "name": "TestResult",
+  "type": "object",
+  "properties": {
+    "participant_id": {
+      "type": "string",
+      "title": "ID do Participante"
+    },
+    "participant_name": {
+      "type": "string",
+      "title": "Nome do Participante"
+    },
+    "participant_email": {
+      "type": "string",
+      "title": "E-mail"
+    },
+    "participant_company": {
+      "type": "string",
+      "title": "Empresa"
+    },
+    "participant_role": {
+      "type": "string",
+      "title": "Cargo"
+    },
+    "participant_birth_date": {
+      "type": "string",
+      "title": "Data de Nascimento"
+    },
+    "plan": {
+      "type": "string",
+      "enum": [
+        "basico",
+        "premium"
+      ],
+      "default": "basico",
+      "title": "Plano"
+    },
+    "answers": {
+      "type": "string",
+      "title": "Respostas JSON"
+    },
+    "scores": {
+      "type": "string",
+      "title": "Pontua\u00e7\u00f5es JSON"
+    },
+    "dominant_type": {
+      "type": "number",
+      "title": "Tipo Dominante"
+    },
+    "dominant_type_name": {
+      "type": "string",
+      "title": "Nome do Tipo Dominante"
+    },
+    "wing": {
+      "type": "number",
+      "title": "Asa Predominante"
+    },
+    "wing_name": {
+      "type": "string",
+      "title": "Nome da Asa"
+    },
+    "confidence_level": {
+      "type": "number",
+      "title": "N\u00edvel de Confian\u00e7a %"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "title": "Dura\u00e7\u00e3o em Segundos"
+    },
+    "completed": {
+      "type": "boolean",
+      "title": "Completo",
+      "default": false
+    }
+  },
+  "required": [
+    "participant_id",
+    "participant_name"
+  ]
+}

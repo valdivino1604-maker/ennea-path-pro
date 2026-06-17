@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Clock, CheckCircle2, Save } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { QUESTIONS, LIKERT_OPTIONS, calculateResults } from "@/lib/enneagramData";
-import { createResult, getParticipant, updateParticipant } from "@/lib/localStore";
+import { createResult, getParticipant, updateParticipant } from "@/lib/cloudStore";
 
 export default function Test() {
   const { participantId } = useParams();
@@ -24,7 +24,7 @@ export default function Test() {
   useEffect(() => {
     (async () => {
       try {
-        const p = getParticipant(participantId);
+        const p = await getParticipant(participantId);
         if (p) {
           if (p.answers) {
             try {
@@ -59,7 +59,7 @@ export default function Test() {
     saveTimeoutRef.current = setTimeout(async () => {
       setSaving(true);
       try {
-        updateParticipant(participantId, {
+        await updateParticipant(participantId, {
           answers: JSON.stringify(newAnswers),
           current_index: newIndex
         });
@@ -101,9 +101,9 @@ export default function Test() {
     setSubmitting(true);
     try {
       const results = calculateResults(answers);
-      const p = getParticipant(participantId) || {};
+      const p = await getParticipant(participantId);
 
-      const savedResult = createResult({
+      const savedResult = await createResult({
         participant_id: participantId,
         participant_name: p.full_name || "",
         participant_email: p.email || "",
@@ -123,7 +123,7 @@ export default function Test() {
       });
 
       // Limpar progresso salvo
-      updateParticipant(participantId, {
+      await updateParticipant(participantId, {
         answers: "{}",
         current_index: 0
       });

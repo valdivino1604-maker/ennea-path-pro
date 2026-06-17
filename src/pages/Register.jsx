@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { createParticipant } from "@/lib/localStore";
+import { createParticipant } from "@/lib/cloudStore";
 import { Link } from "react-router-dom";
 
 export default function Register() {
@@ -32,10 +32,10 @@ export default function Register() {
     if (!validate()) return;
     setLoading(true);
     try {
-      const participant = createParticipant(form);
+      const participant = await createParticipant(form);
       navigate(`/test/${participant.id}`);
     } catch (err) {
-      setErrors({ general: "Erro ao cadastrar. Tente novamente." });
+      setErrors({ general: err.message || "Erro ao cadastrar. Verifique o D1 e tente novamente." });
     } finally {
       setLoading(false);
     }

@@ -5,7 +5,7 @@ import { ArrowLeft, Clock, FileDown, Share2, Star, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import BasicView from "@/components/results/BasicView";
 import { TYPE_DETAILS } from "@/lib/enneagramData";
-import { getResult } from "@/lib/localStore";
+import { getResult } from "@/lib/cloudStore";
 
 export default function Results() {
   const { resultId } = useParams();
@@ -13,8 +13,10 @@ export default function Results() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setResult(getResult(resultId));
-    setLoading(false);
+    getResult(resultId)
+      .then(setResult)
+      .catch(() => setResult(null))
+      .finally(() => setLoading(false));
   }, [resultId]);
 
   if (loading) {

@@ -5,7 +5,7 @@ import {
   filterResults,
   updateParticipant,
   updateResult
-} from "@/lib/localStore";
+} from "@/lib/cloudStore";
 
 const disabledMessage = "Base44 foi desativado neste site.";
 const unavailable = async () => {

@@ -79,6 +79,10 @@ function hasMeaningfulAnswers(participant) {
   }
 }
 
+function sameEmail(a, b) {
+  return normalizeText(a) && normalizeText(a) === normalizeText(b);
+}
+
 function averageConfidence(rows) {
   return Math.round(
     rows.reduce((total, result) => total + (Number(result.confidence_level) || 0), 0) / Math.max(rows.length, 1)
@@ -108,6 +112,10 @@ export default function Admin() {
   const [filterType, setFilterType] = useState("all");
   const [filterCompany, setFilterCompany] = useState("all");
   const [loadError, setLoadError] = useState("");
+  const [editCompanyTarget, setEditCompanyTarget] = useState(null);
+  const [editCompanyValue, setEditCompanyValue] = useState("");
+  const [companyEditError, setCompanyEditError] = useState("");
+  const [savingCompany, setSavingCompany] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -184,14 +192,7 @@ export default function Admin() {
     const ensure = (rawCompany) => {
       const key = companyKey(rawCompany);
       if (!map.has(key)) {
-        map.set(key, {
-          key,
-          company: companyLabel(rawCompany),
-          completed: 0,
-          pending: 0,
-          confidenceTotal: 0,
-          typeCounts: {}
-        });
+        map.set(key, { key, company: companyLabel(rawCompany), completed: 0, pending: 0, confidenceTotal: 0, typeCounts: {} });
       }
       return map.get(key);
     };
@@ -228,6 +229,80 @@ export default function Admin() {
   const dominantType = mostCommonType(filteredResults);
   const startedPending = filteredPending.filter(hasMeaningfulAnswers).length;
 
+  function openCompanyEditor(target) {
+    setEditCompanyTarget(target);
+    setEditCompanyValue(target.company || "");
+    setCompanyEditError("");
+  }
+
+  function closeCompanyEditor() {
+    if (savingCompany) return;
+    setEditCompanyTarget(null);
+    setEditCompanyValue("");
+    setCompanyEditError("");
+  }
+
+  async function saveCompanyEdit() {
+    const target = editCompanyTarget;
+    if (!target) return;
+
+    const newCompany = editCompanyValue.trim();
+    if (!newCompany) {
+      setCompanyEditError("Informe o nome da empresa.");
+      return;
+    }
+
+    setSavingCompany(true);
+    setCompanyEditError("");
+
+    try {
+      const relatedResults = results.filter((result) => {
+        if (target.kind === "result" && result.id === target.id) return true;
+        if (target.participant_id && result.participant_id === target.participant_id) return true;
+        if (target.email && sameEmail(result.participant_email, target.email)) return true;
+        return false;
+      });
+
+      if (target.kind === "result") {
+        await base44.entities.TestResult.update(target.id, { participant_company: newCompany });
+        if (target.participant_id) {
+          await base44.entities.TestParticipant.update(target.participant_id, { company: newCompany }).catch(() => null);
+        }
+      } else {
+        await base44.entities.TestParticipant.update(target.id, { company: newCompany });
+      }
+
+      await Promise.all(
+        relatedResults
+          .filter((result) => target.kind !== "result" || result.id !== target.id)
+          .map((result) => base44.entities.TestResult.update(result.id, { participant_company: newCompany }).catch(() => null))
+      );
+
+      setResults((rows) => rows.map((result) => {
+        const related =
+          (target.kind === "result" && result.id === target.id) ||
+          (target.participant_id && result.participant_id === target.participant_id) ||
+          (target.email && sameEmail(result.participant_email, target.email));
+        return related ? { ...result, participant_company: newCompany } : result;
+      }));
+
+      setParticipants((rows) => rows.map((participant) => {
+        const related =
+          (target.kind === "participant" && participant.id === target.id) ||
+          (target.participant_id && participant.id === target.participant_id) ||
+          (target.email && sameEmail(participant.email, target.email));
+        return related ? { ...participant, company: newCompany } : participant;
+      }));
+
+      setFilterCompany("all");
+      closeCompanyEditor();
+    } catch (err) {
+      setCompanyEditError(err.message || "Nao foi possivel atualizar a empresa.");
+    } finally {
+      setSavingCompany(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="h-screen bg-background flex items-center justify-center">
@@ -250,9 +325,7 @@ export default function Admin() {
             <Link
               key={item.label}
               to={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                item.href === "/admin" ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"
-              }`}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${item.href === "/admin" ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04]"}`}
             >
               <item.icon className="w-4 h-4" />
               {item.label}
@@ -295,60 +368,29 @@ export default function Admin() {
         </header>
 
         <div className="p-4 sm:p-6 space-y-6">
-          {loadError && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/10 text-destructive px-4 py-3 text-sm">
-              {loadError}
-            </div>
-          )}
+          {loadError && <div className="rounded-xl border border-destructive/30 bg-destructive/10 text-destructive px-4 py-3 text-sm">{loadError}</div>}
 
           <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
             <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <Search className="w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nome, e-mail, empresa, cargo ou telefone..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="h-10 bg-background"
-                />
+                <Input placeholder="Buscar por nome, e-mail, empresa, cargo ou telefone..." value={search} onChange={(event) => setSearch(event.target.value)} className="h-10 bg-background" />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                <select
-                  value={filterCompany}
-                  onChange={(event) => setFilterCompany(event.target.value)}
-                  className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground"
-                >
+                <select value={filterCompany} onChange={(event) => setFilterCompany(event.target.value)} className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground">
                   <option value="all">Todas as empresas</option>
-                  {companyOptions.map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
+                  {companyOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select>
-                <select
-                  value={filterType}
-                  onChange={(event) => setFilterType(event.target.value)}
-                  className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground"
-                >
+                <select value={filterType} onChange={(event) => setFilterType(event.target.value)} className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground">
                   <option value="all">Todos os tipos</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((type) => (
-                    <option key={type} value={type}>Tipo {type} - {TYPE_NAMES[type]}</option>
-                  ))}
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((type) => <option key={type} value={type}>Tipo {type} - {TYPE_NAMES[type]}</option>)}
                 </select>
-                <Button
-                  variant="outline"
-                  className="h-10 gap-2"
-                  onClick={() => {
-                    setSearch("");
-                    setFilterCompany("all");
-                    setFilterType("all");
-                  }}
-                >
+                <Button variant="outline" className="h-10 gap-2" onClick={() => { setSearch(""); setFilterCompany("all"); setFilterType("all"); }}>
                   <Filter className="w-4 h-4" /> Limpar filtros
                 </Button>
               </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Analise atual: {filteredResults.length} resultado(s) concluido(s) e {filteredPending.length} cadastro(s) sem resultado no filtro selecionado.
-            </p>
+            <p className="text-[11px] text-muted-foreground">Analise atual: {filteredResults.length} resultado(s) concluido(s) e {filteredPending.length} cadastro(s) sem resultado no filtro selecionado.</p>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -371,18 +413,11 @@ export default function Admin() {
                       <Pie data={typeCounts} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="count">
                         {typeCounts.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                       </Pie>
-                      <Tooltip
-                        content={({ payload }) => {
-                          if (!payload || !payload[0]) return null;
-                          const item = payload[0].payload;
-                          return (
-                            <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-xl">
-                              <p className="text-xs font-semibold text-foreground">{item.name}</p>
-                              <p className="text-[11px] text-muted-foreground">{item.count} teste(s)</p>
-                            </div>
-                          );
-                        }}
-                      />
+                      <Tooltip content={({ payload }) => {
+                        if (!payload || !payload[0]) return null;
+                        const item = payload[0].payload;
+                        return <div className="bg-card border border-border rounded-lg px-3 py-2 shadow-xl"><p className="text-xs font-semibold text-foreground">{item.name}</p><p className="text-[11px] text-muted-foreground">{item.count} teste(s)</p></div>;
+                      }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -398,174 +433,70 @@ export default function Admin() {
                 <SummaryLine label="Com teste iniciado e nao finalizado" value={startedPending} />
                 <SummaryLine label="Tipo predominante" value={dominantType ? `Tipo ${dominantType.type} - ${dominantType.name} (${dominantType.count})` : "—"} />
               </div>
-              {filteredPending.length > 0 && (
-                <p className="mt-4 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                  Existem candidatos cadastrados sem resultado. Para uma analise confiavel da empresa, cobre a conclusao desses testes.
-                </p>
-              )}
+              {filteredPending.length > 0 && <p className="mt-4 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">Existem candidatos cadastrados sem resultado. Para uma analise confiavel da empresa, cobre a conclusao desses testes.</p>}
             </div>
           </div>
 
           <section className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-border flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-heading text-sm font-semibold text-foreground">Analise por empresa</h2>
-                <p className="text-xs text-muted-foreground">Ranking operacional por empresa, conclusao e tipo predominante</p>
-              </div>
+              <div><h2 className="font-heading text-sm font-semibold text-foreground">Analise por empresa</h2><p className="text-xs text-muted-foreground">Ranking operacional por empresa, conclusao e tipo predominante</p></div>
               <span className="text-xs text-muted-foreground">{companyRows.length} empresa(s)</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Empresa</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Total</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Concluidos</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Pendentes</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Tipo predominante</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden lg:table-cell">Confianca media</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b border-border"><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Empresa</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Total</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Concluidos</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Pendentes</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Tipo predominante</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden lg:table-cell">Confianca media</th></tr></thead>
                 <tbody>
-                  {companyRows.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center p-8 text-sm text-muted-foreground">Nenhuma empresa encontrada.</td></tr>
-                  ) : (
-                    companyRows.map((row) => (
-                      <tr key={row.key} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-primary" />
-                            <span className="text-sm font-medium text-foreground">{row.company}</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-sm text-foreground">{row.total}</td>
-                        <td className="p-3 text-sm text-emerald-300">{row.completed}</td>
-                        <td className="p-3 text-sm text-amber-300">{row.pending}</td>
-                        <td className="p-3 hidden md:table-cell">
-                          {row.topType ? (
-                            <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[row.topType] || "#6366f1" }}>
-                              T{row.topType} - {TYPE_NAMES[row.topType]} ({row.topTypeCount})
-                            </span>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-sm text-foreground hidden lg:table-cell">{row.avgConfidence ? `${row.avgConfidence}%` : "—"}</td>
-                      </tr>
-                    ))
-                  )}
+                  {companyRows.length === 0 ? <tr><td colSpan={6} className="text-center p-8 text-sm text-muted-foreground">Nenhuma empresa encontrada.</td></tr> : companyRows.map((row) => (
+                    <tr key={row.key} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
+                      <td className="p-3"><div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /><span className="text-sm font-medium text-foreground">{row.company}</span></div></td>
+                      <td className="p-3 text-sm text-foreground">{row.total}</td><td className="p-3 text-sm text-emerald-300">{row.completed}</td><td className="p-3 text-sm text-amber-300">{row.pending}</td>
+                      <td className="p-3 hidden md:table-cell">{row.topType ? <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[row.topType] || "#6366f1" }}>T{row.topType} - {TYPE_NAMES[row.topType]} ({row.topTypeCount})</span> : <span className="text-sm text-muted-foreground">—</span>}</td>
+                      <td className="p-3 text-sm text-foreground hidden lg:table-cell">{row.avgConfidence ? `${row.avgConfidence}%` : "—"}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </section>
 
           <section className="bg-card border border-border rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-heading text-sm font-semibold text-foreground">Resultados concluidos</h2>
-                <p className="text-xs text-muted-foreground">Candidatos que finalizaram o teste</p>
-              </div>
-              <span className="text-xs text-muted-foreground">{filteredResults.length} encontrado(s)</span>
-            </div>
+            <div className="p-4 border-b border-border flex items-center justify-between gap-3"><div><h2 className="font-heading text-sm font-semibold text-foreground">Resultados concluidos</h2><p className="text-xs text-muted-foreground">Candidatos que finalizaram o teste</p></div><span className="text-xs text-muted-foreground">{filteredResults.length} encontrado(s)</span></div>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Participante</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa/Cargo</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Tipo</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Confianca</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden lg:table-cell">Data</th>
-                    <th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Acao</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b border-border"><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Participante</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa/Cargo</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Tipo</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Confianca</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden lg:table-cell">Data</th><th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Acao</th></tr></thead>
                 <tbody>
-                  {filteredResults.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center p-10 text-sm text-muted-foreground">Nenhum resultado concluido encontrado.</td></tr>
-                  ) : (
-                    filteredResults.map((result) => (
-                      <tr key={result.id} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
-                        <td className="p-3">
-                          <p className="text-sm font-medium text-foreground">{result.participant_name || "Sem nome"}</p>
-                          <p className="text-[11px] text-muted-foreground">{result.participant_email || "—"}</p>
-                        </td>
-                        <td className="p-3 text-sm text-muted-foreground hidden sm:table-cell">
-                          <p>{result.participant_company || "—"}</p>
-                          <p className="text-[11px]">{result.participant_role || "—"}</p>
-                        </td>
-                        <td className="p-3">
-                          <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[result.dominant_type] || "#6366f1" }}>
-                            T{result.dominant_type} - {TYPE_NAMES[result.dominant_type] || "—"}
-                          </span>
-                        </td>
-                        <td className="p-3 text-sm font-medium text-foreground hidden md:table-cell">{result.confidence_level || 0}%</td>
-                        <td className="p-3 text-sm text-muted-foreground hidden lg:table-cell">{formatDate(result.created_date)}</td>
-                        <td className="p-3 text-right">
-                          <Link to={`/results/${result.id}`}>
-                            <Button variant="ghost" size="sm" className="h-8 gap-1 text-primary hover:text-primary/80 text-xs"><Eye className="w-3 h-3" /> Ver</Button>
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  {filteredResults.length === 0 ? <tr><td colSpan={6} className="text-center p-10 text-sm text-muted-foreground">Nenhum resultado concluido encontrado.</td></tr> : filteredResults.map((result) => (
+                    <tr key={result.id} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
+                      <td className="p-3"><p className="text-sm font-medium text-foreground">{result.participant_name || "Sem nome"}</p><p className="text-[11px] text-muted-foreground">{result.participant_email || "—"}</p></td>
+                      <td className="p-3 text-sm text-muted-foreground hidden sm:table-cell"><p>{result.participant_company || "—"}</p><p className="text-[11px]">{result.participant_role || "—"}</p><button type="button" onClick={() => openCompanyEditor({ kind: "result", id: result.id, participant_id: result.participant_id, email: result.participant_email, name: result.participant_name, company: result.participant_company })} className="mt-1 text-[11px] text-primary hover:underline">Editar empresa</button></td>
+                      <td className="p-3"><span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[result.dominant_type] || "#6366f1" }}>T{result.dominant_type} - {TYPE_NAMES[result.dominant_type] || "—"}</span></td>
+                      <td className="p-3 text-sm font-medium text-foreground hidden md:table-cell">{result.confidence_level || 0}%</td><td className="p-3 text-sm text-muted-foreground hidden lg:table-cell">{formatDate(result.created_date)}</td>
+                      <td className="p-3 text-right"><Link to={`/results/${result.id}`}><Button variant="ghost" size="sm" className="h-8 gap-1 text-primary hover:text-primary/80 text-xs"><Eye className="w-3 h-3" /> Ver</Button></Link></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </section>
 
           <section className="bg-card border border-border rounded-2xl overflow-hidden">
-            <div className="p-4 border-b border-border flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-heading text-sm font-semibold text-foreground">Candidatos cadastrados sem resultado</h2>
-                <p className="text-xs text-muted-foreground">Pessoas que estao no banco, mas ainda nao finalizaram o teste</p>
-              </div>
-              <span className="text-xs text-muted-foreground">{filteredPending.length} encontrado(s)</span>
-            </div>
+            <div className="p-4 border-b border-border flex items-center justify-between gap-3"><div><h2 className="font-heading text-sm font-semibold text-foreground">Candidatos cadastrados sem resultado</h2><p className="text-xs text-muted-foreground">Pessoas que estao no banco, mas ainda nao finalizaram o teste</p></div><span className="text-xs text-muted-foreground">{filteredPending.length} encontrado(s)</span></div>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Candidato</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa/Cargo</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Telefone</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Status</th>
-                    <th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Acao</th>
-                  </tr>
-                </thead>
+                <thead><tr className="border-b border-border"><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Candidato</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa/Cargo</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Telefone</th><th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Status</th><th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Acao</th></tr></thead>
                 <tbody>
-                  {filteredPending.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center p-10 text-sm text-muted-foreground">Nenhum cadastro pendente encontrado.</td></tr>
-                  ) : (
-                    filteredPending.map((participant) => {
-                      const started = hasMeaningfulAnswers(participant);
-                      return (
-                        <tr key={participant.id} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
-                          <td className="p-3">
-                            <p className="text-sm font-medium text-foreground">{participant.full_name || "Sem nome"}</p>
-                            <p className="text-[11px] text-muted-foreground">{participant.email || "—"}</p>
-                          </td>
-                          <td className="p-3 text-sm text-muted-foreground hidden sm:table-cell">
-                            <p>{participant.company || "—"}</p>
-                            <p className="text-[11px]">{participant.role || "—"}</p>
-                          </td>
-                          <td className="p-3 text-sm text-muted-foreground hidden md:table-cell">{participant.phone || "—"}</td>
-                          <td className="p-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${started ? "bg-amber-500/15 text-amber-300" : "bg-muted text-muted-foreground"}`}>
-                              {started ? <Clock className="w-3 h-3" /> : <UserRound className="w-3 h-3" />}
-                              {started ? "Iniciado" : "So cadastrado"}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <Link to={`/test/${participant.id}`}>
-                              <Button variant="ghost" size="sm" className="h-8 gap-1 text-primary hover:text-primary/80 text-xs">
-                                <CheckCircle2 className="w-3 h-3" /> Abrir teste
-                              </Button>
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                  {filteredPending.length === 0 ? <tr><td colSpan={5} className="text-center p-10 text-sm text-muted-foreground">Nenhum cadastro pendente encontrado.</td></tr> : filteredPending.map((participant) => {
+                    const started = hasMeaningfulAnswers(participant);
+                    return (
+                      <tr key={participant.id} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
+                        <td className="p-3"><p className="text-sm font-medium text-foreground">{participant.full_name || "Sem nome"}</p><p className="text-[11px] text-muted-foreground">{participant.email || "—"}</p></td>
+                        <td className="p-3 text-sm text-muted-foreground hidden sm:table-cell"><p>{participant.company || "—"}</p><p className="text-[11px]">{participant.role || "—"}</p><button type="button" onClick={() => openCompanyEditor({ kind: "participant", id: participant.id, email: participant.email, name: participant.full_name, company: participant.company })} className="mt-1 text-[11px] text-primary hover:underline">Editar empresa</button></td>
+                        <td className="p-3 text-sm text-muted-foreground hidden md:table-cell">{participant.phone || "—"}</td>
+                        <td className="p-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${started ? "bg-amber-500/15 text-amber-300" : "bg-muted text-muted-foreground"}`}>{started ? <Clock className="w-3 h-3" /> : <UserRound className="w-3 h-3" />}{started ? "Iniciado" : "So cadastrado"}</span></td>
+                        <td className="p-3 text-right"><Link to={`/test/${participant.id}`}><Button variant="ghost" size="sm" className="h-8 gap-1 text-primary hover:text-primary/80 text-xs"><CheckCircle2 className="w-3 h-3" /> Abrir teste</Button></Link></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -573,21 +504,27 @@ export default function Admin() {
         </div>
       </div>
 
+      {editCompanyTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div><h2 className="font-heading text-base font-semibold text-foreground">Editar empresa</h2><p className="text-xs text-muted-foreground mt-1">{editCompanyTarget.name || "Participante"}</p></div>
+              <button onClick={closeCompanyEditor} className="text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="text-xs text-muted-foreground">Empresa</label>
+            <Input value={editCompanyValue} onChange={(event) => setEditCompanyValue(event.target.value)} className="mt-1 bg-background" placeholder="Nome da empresa" autoFocus />
+            {companyEditError && <p className="mt-2 text-xs text-destructive">{companyEditError}</p>}
+            <div className="flex justify-end gap-2 mt-5"><Button variant="outline" onClick={closeCompanyEditor} disabled={savingCompany}>Cancelar</Button><Button onClick={saveCompanyEdit} disabled={savingCompany}>{savingCompany ? "Salvando..." : "Salvar empresa"}</Button></div>
+          </div>
+        </div>
+      )}
+
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-60 bg-sidebar border-r border-sidebar-border p-5">
-            <div className="flex items-center justify-between mb-8">
-              <span className="font-display text-base font-semibold text-foreground">Diagnostico de Lideranca</span>
-              <button onClick={() => setSidebarOpen(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
-            </div>
-            <nav className="space-y-0.5">
-              {NAV_ITEMS.map((item) => (
-                <Link key={item.label} to={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${item.href === "/admin" ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground"}`}>
-                  <item.icon className="w-4 h-4" /> {item.label}
-                </Link>
-              ))}
-            </nav>
+            <div className="flex items-center justify-between mb-8"><span className="font-display text-base font-semibold text-foreground">Diagnostico de Lideranca</span><button onClick={() => setSidebarOpen(false)}><X className="w-5 h-5 text-muted-foreground" /></button></div>
+            <nav className="space-y-0.5">{NAV_ITEMS.map((item) => <Link key={item.label} to={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${item.href === "/admin" ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground"}`}><item.icon className="w-4 h-4" /> {item.label}</Link>)}</nav>
           </aside>
         </div>
       )}
@@ -596,22 +533,9 @@ export default function Admin() {
 }
 
 function MetricCard({ icon: Icon, label, value }) {
-  return (
-    <div className="bg-card border border-border rounded-2xl p-5">
-      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-        <Icon className="w-4 h-4 text-primary" />
-      </div>
-      <p className="text-2xl font-bold text-foreground mt-3">{value}</p>
-      <p className="text-[11px] text-muted-foreground mt-0.5">{label}</p>
-    </div>
-  );
+  return <div className="bg-card border border-border rounded-2xl p-5"><div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center"><Icon className="w-4 h-4 text-primary" /></div><p className="text-2xl font-bold text-foreground mt-3">{value}</p><p className="text-[11px] text-muted-foreground mt-0.5">{label}</p></div>;
 }
 
 function SummaryLine({ label, value }) {
-  return (
-    <div className="flex items-center justify-between border-b border-border/50 pb-2 last:border-0 last:pb-0 gap-4">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground text-right">{value}</span>
-    </div>
-  );
+  return <div className="flex items-center justify-between border-b border-border/50 pb-2 last:border-0 last:pb-0 gap-4"><span className="text-muted-foreground">{label}</span><span className="font-semibold text-foreground text-right">{value}</span></div>;
 }

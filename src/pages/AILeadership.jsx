@@ -1,72 +1,165 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Bot, Sparkles, Send, Loader2, User, Zap, Lightbulb, Target, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, Building2, Brain, CheckCircle2, GitBranch, Lightbulb, Loader2, ShieldAlert, Target, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { base44 } from "@/api/base44Client";
 import { TYPE_NAMES, TYPE_COLORS, TYPE_DETAILS } from "@/lib/enneagramData";
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function companyLabel(value) {
+  const label = String(value || "").trim();
+  return label || "Sem empresa";
+}
+
+function companyKey(value) {
+  return normalizeText(companyLabel(value));
+}
+
+function getLatestByEmail(rows) {
+  const latest = {};
+  rows.forEach((item) => {
+    const key = normalizeText(item.participant_email || item.id);
+    if (!latest[key]) latest[key] = item;
+  });
+  return Object.values(latest);
+}
+
+function groupByType(rows) {
+  const counts = {};
+  for (let i = 1; i <= 9; i++) counts[i] = 0;
+  rows.forEach((item) => {
+    const type = Number(item.dominant_type);
+    if (type) counts[type] = (counts[type] || 0) + 1;
+  });
+  return counts;
+}
+
+function classifyGroup(counts, total) {
+  const ordered = Object.entries(counts)
+    .map(([type, count]) => ({ type: Number(type), count, percentage: total ? Math.round((count / total) * 100) : 0 }))
+    .sort((a, b) => b.count - a.count || a.type - b.type);
+
+  const dominant = ordered.filter((item) => item.count > 0).slice(0, 3);
+  const missing = ordered.filter((item) => item.count === 0).map((item) => item.type);
+  const excess = ordered.filter((item) => item.percentage >= 35 && item.count >= 2);
+  return { ordered, dominant, missing, excess };
+}
+
+function riskForType(type) {
+  const risks = {
+    1: "Excesso de cobrança, rigidez e baixa tolerância a erro.",
+    2: "Risco de dependência emocional, excesso de ajuda e dificuldade de cobrar desempenho.",
+    3: "Competição interna, foco excessivo em imagem e pressão por resultado.",
+    4: "Oscilação emocional, personalização de críticas e conflitos por reconhecimento.",
+    5: "Isolamento, pouca comunicação e lentidão por análise excessiva.",
+    6: "Medo de errar, excesso de cautela e busca constante por validação.",
+    7: "Dispersão, dificuldade de concluir e excesso de ideias sem execução.",
+    8: "Confronto, disputa de controle e comunicação dura.",
+    9: "Evitação de conflito, lentidão decisória e acomodação."
+  };
+  return risks[type] || "Risco comportamental não identificado.";
+}
+
+function strengthForType(type) {
+  const strengths = {
+    1: "qualidade, padrão, organização e melhoria contínua",
+    2: "cuidado com pessoas, integração e apoio ao time",
+    3: "meta, entrega, produtividade e ambição",
+    4: "criatividade, autenticidade e sensibilidade ao clima",
+    5: "análise, estratégia, conhecimento técnico e profundidade",
+    6: "prevenção de risco, segurança, lealdade e planejamento",
+    7: "inovação, energia, visão de oportunidade e adaptação",
+    8: "decisão, força de execução, proteção e liderança firme",
+    9: "mediação, estabilidade, escuta e pacificação"
+  };
+  return strengths[type] || "força não identificada";
+}
+
+function recommendationForMissing(type) {
+  const recommendations = {
+    1: "Criar processos, checklists e critérios claros de qualidade.",
+    2: "Fortalecer rituais de integração, escuta e apoio entre pessoas.",
+    3: "Definir metas objetivas, ranking de entregas e indicadores de desempenho.",
+    4: "Abrir espaço para criatividade, diferenciação e leitura do clima emocional.",
+    5: "Trazer mais análise técnica, estudo profundo e validação por dados.",
+    6: "Mapear riscos, criar planos de contingência e revisar decisões críticas.",
+    7: "Estimular inovação, ideias novas e visão de oportunidade.",
+    8: "Definir responsáveis fortes para decisão, cobrança e destravamento.",
+    9: "Criar mediação, alinhamento e mecanismos para reduzir atritos."
+  };
+  return recommendations[type] || "Reforçar competência complementar.";
+}
+
+function buildGroupAnalysis(rows) {
+  const total = rows.length;
+  const counts = groupByType(rows);
+  const info = classifyGroup(counts, total);
+  const main = info.dominant[0];
+  const second = info.dominant[1];
+  const missingImportant = info.missing.slice(0, 4);
+
+  const risks = [];
+  if (info.excess.length) {
+    info.excess.forEach((item) => risks.push(`Concentração de Tipo ${item.type}: ${riskForType(item.type)}`));
+  }
+  if (info.missing.includes(8)) risks.push("Pouca energia de confronto e decisão pode deixar problemas difíceis sem dono.");
+  if (info.missing.includes(5)) risks.push("Baixa presença analítica pode fragilizar decisões técnicas e estratégicas.");
+  if (info.missing.includes(3)) risks.push("Ausência de perfil realizador pode reduzir ritmo, cobrança e foco em entrega.");
+  if (info.missing.includes(9)) risks.push("Sem perfil pacificador, conflitos podem escalar mais rápido.");
+  if (!risks.length) risks.push("O grupo tem distribuição relativamente equilibrada; o risco maior está na comunicação entre estilos diferentes.");
+
+  const recommendations = [];
+  if (main) recommendations.push(`Use o Tipo ${main.type} como força predominante do grupo: ${strengthForType(main.type)}.`);
+  if (second) recommendations.push(`O Tipo ${second.type} aparece como apoio comportamental relevante: ${strengthForType(second.type)}.`);
+  missingImportant.forEach((type) => recommendations.push(`Tipo ${type} ausente/fraco: ${recommendationForMissing(type)}`));
+  recommendations.push("Defina papéis por perfil: quem decide, quem revisa, quem executa, quem integra e quem antecipa riscos.");
+  recommendations.push("Não use o eneagrama para rotular pessoas; use para melhorar comunicação, liderança e alocação de responsabilidades.");
+
+  return { counts, ...info, risks, recommendations, total };
+}
+
 export default function AILeadership() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [topic, setTopic] = useState("");
+  const [selectedCompany, setSelectedCompany] = useState("all");
+  const [analysis, setAnalysis] = useState(null);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    base44.entities.TestResult.filter({ completed: true }, '-created_date', 500).then(r => {
-      const latest = {};
-      r.forEach(item => {
-        if (!latest[item.participant_email]) latest[item.participant_email] = item;
-      });
-      setResults(Object.values(latest));
-      setLoading(false);
-    });
+    base44.entities.TestResult.filter({ completed: true }, "-created_date", 1000)
+      .then((rows) => setResults(getLatestByEmail(Array.isArray(rows) ? rows : [])))
+      .finally(() => setLoading(false));
   }, []);
 
-  const person = results.find(r => r.id === selectedId);
-  const detail = person ? TYPE_DETAILS[person.dominant_type] : null;
+  const companyOptions = useMemo(() => {
+    const map = new Map();
+    results.forEach((item) => {
+      const label = companyLabel(item.participant_company);
+      const key = companyKey(label);
+      if (!map.has(key)) map.set(key, label);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  }, [results]);
 
-  const handleGenerate = async () => {
-    if (!person || !topic.trim()) return;
+  const filteredResults = useMemo(() => {
+    if (selectedCompany === "all") return results;
+    return results.filter((item) => companyKey(item.participant_company) === selectedCompany);
+  }, [results, selectedCompany]);
+
+  const preview = useMemo(() => buildGroupAnalysis(filteredResults), [filteredResults]);
+  const maxCount = Math.max(...Object.values(preview.counts || {}), 1);
+
+  const handleGenerate = () => {
     setGenerating(true);
-    try {
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt: `Você é um coach de liderança especializado em Eneagrama. Uma pessoa do Tipo ${person.dominant_type} (${person.dominant_type_name}) com asa ${person.wing}w quer orientação sobre: "${topic}".
-
-Contexto do perfil:
-- Motivação: ${detail.motivation}
-- Forças: ${detail.strengths}
-- Fraquezas: ${detail.weaknesses}
-- Estilo de liderança: ${detail.leadership}
-- Comunicação: ${detail.communication}
-
-Dê uma resposta prática e acionável, em português, com:
-1. Uma análise de como este tipo lida com o tema
-2. 3 estratégias específicas para desenvolver liderança neste aspecto
-3. Uma dica final de autoconhecimento
-
-Mantenha a resposta concisa (máximo 250 palavras), tom profissional mas acolhedor.`,
-        model: "gpt_5_mini"
-      });
-      setMessages(prev => [...prev, { role: "user", content: topic }, { role: "assistant", content: response.data }]);
-      setTopic("");
-    } catch (err) {
-      console.error(err);
-    } finally {
+    setTimeout(() => {
+      setAnalysis(buildGroupAnalysis(filteredResults));
       setGenerating(false);
-    }
+    }, 400);
   };
-
-  const suggestedTopics = [
-    "Como delegar melhor",
-    "Dar feedback difícil",
-    "Motivar equipe em crise",
-    "Gerenciar conflitos",
-    "Tomar decisões sob pressão",
-    "Desenvolver inteligência emocional"
-  ];
 
   if (loading) {
     return (
@@ -78,158 +171,173 @@ Mantenha a resposta concisa (máximo 250 palavras), tom profissional mas acolhed
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-10">
         <Link to="/admin" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-6 transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
         </Link>
 
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4 mb-8">
+          <div className="w-11 h-11 rounded-xl bg-violet-500/10 flex items-center justify-center">
             <Bot className="w-5 h-5 text-violet-400" />
           </div>
-          <div>
-            <h1 className="font-display text-2xl font-bold text-foreground">IA para Liderança</h1>
-            <p className="text-sm text-muted-foreground">Coach de liderança com IA treinada em Eneagrama.</p>
+          <div className="flex-1">
+            <h1 className="font-display text-2xl font-bold text-foreground">IA de Análise de Grupo</h1>
+            <p className="text-sm text-muted-foreground">Diagnóstico gerencial automático da equipe com base nos resultados de Eneagrama.</p>
           </div>
+          <Button onClick={handleGenerate} disabled={generating || filteredResults.length === 0} className="gap-2 rounded-xl">
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
+            {generating ? "Analisando..." : "Gerar análise do grupo"}
+          </Button>
         </div>
 
-        {/* Select Person */}
-        <div className="bg-card border border-border rounded-2xl p-5 mb-6">
-          <label className="text-xs font-medium text-muted-foreground mb-2 block">Selecionar Perfil</label>
-          <Select value={selectedId} onValueChange={(v) => { setSelectedId(v); setMessages([]); }}>
-            <SelectTrigger className="bg-background">
-              <SelectValue placeholder="Escolha um perfil para coaching..." />
-            </SelectTrigger>
-            <SelectContent>
-              {results.map(r => (
-                <SelectItem key={r.id} value={r.id}>
-                  <span className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[r.dominant_type] }}>T{r.dominant_type}</span>
-                    {r.participant_name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {person && detail && (
-          <>
-            {/* Profile Card */}
-            <div className="bg-card border border-border rounded-2xl p-5 mb-6">
-              <div className="flex items-center gap-4">
-                <span className="text-3xl">{detail.emoji}</span>
-                <div>
-                  <h2 className="font-heading text-lg font-bold text-foreground">{person.participant_name}</h2>
-                  <p className="text-sm text-muted-foreground">Tipo {person.dominant_type} — {detail.name} · Asa {person.wing}w</p>
-                </div>
-              </div>
-              <div className="grid sm:grid-cols-3 gap-3 mt-4">
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-border/50">
-                  <div className="flex items-center gap-1.5 mb-1"><Zap className="w-3 h-3 text-primary" /><span className="text-[10px] font-semibold text-foreground">Liderança</span></div>
-                  <p className="text-[11px] text-muted-foreground">{detail.leadership}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-border/50">
-                  <div className="flex items-center gap-1.5 mb-1"><Users className="w-3 h-3 text-primary" /><span className="text-[10px] font-semibold text-foreground">Comunicação</span></div>
-                  <p className="text-[11px] text-muted-foreground">{detail.communication}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-border/50">
-                  <div className="flex items-center gap-1.5 mb-1"><Target className="w-3 h-3 text-primary" /><span className="text-[10px] font-semibold text-foreground">Motivação</span></div>
-                  <p className="text-[11px] text-muted-foreground">{detail.motivation}</p>
-                </div>
-              </div>
+        <section className="bg-card border border-border rounded-2xl p-5 mb-6">
+          <div className="grid lg:grid-cols-3 gap-4 items-end">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">Empresa / Equipe</label>
+              <Select value={selectedCompany} onValueChange={(value) => { setSelectedCompany(value); setAnalysis(null); }}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder="Selecione a empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as empresas</SelectItem>
+                  {companyOptions.map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+            <Metric icon={Users} label="Pessoas analisadas" value={filteredResults.length} />
+            <Metric icon={Building2} label="Empresas no banco" value={companyOptions.length} />
+          </div>
+        </section>
 
-            {/* Chat */}
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h3 className="font-heading text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-violet-400" /> Coach de Liderança IA
-                </h3>
+        {filteredResults.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground bg-card border border-border rounded-2xl">
+            <Bot className="w-12 h-12 mx-auto mb-4 opacity-30" />
+            <p>Nenhum resultado encontrado para esta seleção.</p>
+          </div>
+        ) : (
+          <>
+            <section className="grid lg:grid-cols-3 gap-6 mb-6">
+              <div className="lg:col-span-2 bg-card border border-border rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-5">
+                  <BarChart3 className="w-4 h-4 text-primary" />
+                  <h2 className="font-heading text-base font-semibold text-foreground">Mapa de distribuição do grupo</h2>
+                </div>
+                <div className="space-y-3">
+                  {preview.ordered.map((item) => (
+                    <div key={item.type}>
+                      <div className="flex items-center justify-between mb-1 gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-7 h-7 rounded-lg text-[11px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: TYPE_COLORS[item.type] }}>T{item.type}</span>
+                          <span className="text-sm text-foreground truncate">{TYPE_NAMES[item.type]}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-bold">{item.count} pessoa(s) · {item.percentage}%</span>
+                      </div>
+                      <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${Math.max(4, (item.count / maxCount) * 100)}%`, backgroundColor: TYPE_COLORS[item.type] }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Messages */}
-              <div className="p-4 min-h-[200px] max-h-[400px] overflow-y-auto space-y-4">
-                {messages.length === 0 && (
-                  <div className="text-center py-12">
-                    <Sparkles className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-50" />
-                    <p className="text-sm text-muted-foreground">Pergunte sobre liderança, gestão ou desenvolvimento</p>
-                  </div>
-                )}
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex gap-3 ${m.role === "user" ? "justify-end" : ""}`}>
-                    {m.role === "assistant" && (
-                      <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                        <Bot className="w-3.5 h-3.5 text-violet-400" />
-                      </div>
-                    )}
-                    <div className={`max-w-[80%] rounded-xl p-3 ${m.role === "user" ? "bg-primary/15 text-foreground" : "bg-white/[0.04] text-muted-foreground"}`}>
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</p>
-                    </div>
-                    {m.role === "user" && (
-                      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <User className="w-3.5 h-3.5 text-primary" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {generating && (
-                  <div className="flex gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                      <Bot className="w-3.5 h-3.5 text-violet-400" />
-                    </div>
-                    <div className="bg-white/[0.04] rounded-xl p-3">
-                      <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-                    </div>
-                  </div>
-                )}
+              <div className="bg-card border border-border rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-5">
+                  <Target className="w-4 h-4 text-primary" />
+                  <h2 className="font-heading text-base font-semibold text-foreground">Leitura rápida</h2>
+                </div>
+                <div className="space-y-3">
+                  <Insight label="Tipo predominante" value={preview.dominant[0] ? `Tipo ${preview.dominant[0].type} - ${TYPE_NAMES[preview.dominant[0].type]}` : "Sem predominância"} />
+                  <Insight label="Tipos fortes" value={preview.dominant.map((item) => `T${item.type}`).join(", ") || "—"} />
+                  <Insight label="Tipos ausentes" value={preview.missing.length ? preview.missing.map((type) => `T${type}`).join(", ") : "Nenhum"} />
+                  <Insight label="Concentração de risco" value={preview.excess.length ? preview.excess.map((item) => `T${item.type} (${item.percentage}%)`).join(", ") : "Baixa"} />
+                </div>
               </div>
+            </section>
 
-              {/* Suggested Topics */}
-              {messages.length === 0 && (
-                <div className="px-4 pb-3">
-                  <p className="text-[10px] text-muted-foreground mb-2">Sugestões:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suggestedTopics.map((t, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setTopic(t)}
-                        className="text-[10px] px-2.5 py-1.5 rounded-full bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
-                      >
-                        {t}
-                      </button>
+            {(analysis || preview) && (
+              <section className="space-y-6">
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-5">
+                    <ShieldAlert className="w-4 h-4 text-amber-300" />
+                    <h2 className="font-heading text-base font-semibold text-foreground">Riscos de gestão e conflito</h2>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {(analysis || preview).risks.map((risk, index) => (
+                      <div key={index} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted-foreground leading-relaxed">
+                        {risk}
+                      </div>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {/* Input */}
-              <div className="p-4 border-t border-border">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={topic}
-                    onChange={e => setTopic(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleGenerate()}
-                    placeholder="Como posso melhorar minha comunicação como líder?"
-                    className="flex-1 bg-background border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
-                  />
-                  <Button onClick={handleGenerate} disabled={generating || !topic.trim()} size="sm" className="rounded-xl px-4">
-                    {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </Button>
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-5">
+                    <Lightbulb className="w-4 h-4 text-emerald-300" />
+                    <h2 className="font-heading text-base font-semibold text-foreground">Recomendações da IA para o grupo</h2>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {(analysis || preview).recommendations.map((item, index) => (
+                      <div key={index} className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                        <div className="flex items-start gap-3">
+                          <span className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-300 flex items-center justify-center text-xs font-bold shrink-0">{index + 1}</span>
+                          <p className="text-sm text-muted-foreground leading-relaxed">{item}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </div>
+
+                <div className="bg-card border border-border rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-5">
+                    <GitBranch className="w-4 h-4 text-blue-300" />
+                    <h2 className="font-heading text-base font-semibold text-foreground">Mapa de papéis sugeridos</h2>
+                  </div>
+                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {filteredResults.slice(0, 18).map((person) => {
+                      const type = Number(person.dominant_type);
+                      const detail = TYPE_DETAILS[type];
+                      return (
+                        <div key={person.id} className="rounded-xl border border-border bg-background/40 p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="w-7 h-7 rounded-lg text-[11px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: TYPE_COLORS[type] }}>T{type}</span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-foreground truncate">{person.participant_name || "Sem nome"}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">{person.participant_role || "Sem função"}</p>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed"><strong className="text-foreground">Melhor uso:</strong> {strengthForType(type)}.</p>
+                          <p className="text-[11px] text-muted-foreground leading-relaxed mt-1"><strong className="text-foreground">Cuidado:</strong> {riskForType(type)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </section>
+            )}
           </>
         )}
-
-        {!person && !loading && (
-          <div className="text-center py-20 text-muted-foreground">
-            <Bot className="w-12 h-12 mx-auto mb-4 opacity-30" />
-            <p>Selecione um perfil para iniciar o coaching com IA</p>
-          </div>
-        )}
       </div>
+    </div>
+  );
+}
+
+function Metric({ icon: Icon, label, value }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/40 p-4">
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+        <Icon className="w-4 h-4 text-primary" />
+        <span className="text-[11px]">{label}</span>
+      </div>
+      <p className="text-2xl font-bold text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function Insight({ label, value }) {
+  return (
+    <div className="border-b border-border/50 pb-3 last:border-0 last:pb-0">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">{label}</p>
+      <p className="text-sm text-foreground mt-1 leading-relaxed">{value}</p>
     </div>
   );
 }

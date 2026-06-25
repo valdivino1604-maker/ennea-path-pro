@@ -6,9 +6,14 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: deploy-cloudflare-main
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -21,10 +26,16 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: Build application
         run: npm run build
+
+      - name: Show deployment target
+        run: |
+          echo "Worker: ennea-path-pro1515"
+          echo "Assets: ./dist"
+          echo "Config: wrangler.toml"
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3

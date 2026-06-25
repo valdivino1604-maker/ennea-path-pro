@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, BarChart3, Bot, Heart, History, LayoutDashboard, LogOut, Settings, Target, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, ClipboardCheck, Download, Heart, History, LayoutDashboard, LogOut, Settings, Target, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { icon: Target, label: "Plano de Desenvolvimento", href: "/admin/development-plan" },
   { icon: History, label: "Historico Comportamental", href: "/admin/behavioral-history" },
   { icon: Bot, label: "IA para Lideranca", href: "/admin/ai-leadership" },
+  { icon: ClipboardCheck, label: "Avaliacao de Desempenho", href: "/admin/performance-review" },
   { icon: BarChart3, label: "Relatorios", href: "/admin/reports" },
   { icon: Settings, label: "Configuracoes", href: "/admin/settings" }
 ];
@@ -57,25 +58,27 @@ export default function AdminSettings() {
             <div className="mt-4 grid md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
               <Status label="Dashboard" value="Operacional" />
               <Status label="Filtro por empresa" value="Ativo" />
-              <Status label="Editar empresa" value="Ativo" />
+              <Status label="Editar nome/empresa" value="Ativo" />
+              <Status label="Editar funcao/cargo" value="Ativo" />
               <Status label="Excluir candidato" value="Ativo" />
-              <Status label="Coluna funcao/cargo" value="Ativo" />
-              <Status label="Legenda de clareza" value="Ativo" />
-              <Status label="Exportacao CSV" value="Pendente" />
-              <Status label="Editar funcao" value="Pendente" />
+              <Status label="Exportacao CSV" value="Ativo" />
+              <Status label="Filtro por data" value="Ativo" />
+              <Status label="Historico de alteracoes" value="Ativo local" />
+              <Status label="Relatorio individual PDF" value="Ativo" />
+              <Status label="Avaliacao de desempenho" value="Ativo D1" />
+              <Status label="9-box e PDI" value="Ativo D1" />
+              <Status label="IA de grupo" value="Ativo" />
             </div>
           </section>
 
           <section className="bg-card border border-border rounded-2xl p-5">
-            <h2 className="font-heading text-base font-semibold text-foreground">Melhorias recomendadas</h2>
-            <p className="text-xs text-muted-foreground mt-1">Prioridades para deixar o sistema mais forte para uso gerencial.</p>
+            <h2 className="font-heading text-base font-semibold text-foreground">Modulos gerenciais</h2>
+            <p className="text-xs text-muted-foreground mt-1">Acesse os recursos principais do sistema.</p>
             <div className="mt-5 grid lg:grid-cols-2 gap-3">
-              <Improvement title="Padronizar empresas" text="Evitar nomes duplicados como Metal Vida, MetalVida e Metal vida." priority="Alta" />
-              <Improvement title="Editar funcao/cargo" text="Permitir alterar o cargo do candidato pelo Admin." priority="Alta" />
-              <Improvement title="Exportar Excel/CSV" text="Exportar resultados filtrados por empresa, tipo, cargo e data." priority="Alta" />
-              <Improvement title="Relatorio individual em PDF" text="Gerar PDF com tipo, asa, pontos fortes, riscos e recomendacoes." priority="Alta" />
-              <Improvement title="Filtro por data" text="Filtrar testes por semana, mes ou periodo personalizado." priority="Media" />
-              <Improvement title="Historico de alteracoes" text="Registrar edicoes e exclusoes feitas no painel." priority="Media" />
+              <Module title="Avaliação de Desempenho" text="Competências, metas, potencial, 9-box, feedback e PDI salvos no banco D1." href="/admin/performance-review" icon={ClipboardCheck} />
+              <Module title="Exportar CSV" text="Exporte resultados filtrados por empresa, tipo, cargo e data pelo Dashboard." href="/admin" icon={Download} />
+              <Module title="IA de Análise de Grupo" text="Leitura gerencial de distribuição de tipos, riscos, ausências e recomendações." href="/admin/ai-leadership" icon={Bot} />
+              <Module title="Relatórios" text="Painel de relatórios e indicadores do sistema." href="/admin/reports" icon={BarChart3} />
             </div>
           </section>
         </div>
@@ -85,11 +88,10 @@ export default function AdminSettings() {
 }
 
 function Status({ label, value }) {
-  const active = value === "Ativo" || value === "Operacional";
+  const active = value === "Ativo" || value === "Operacional" || value === "Ativo D1" || value === "Ativo local";
   return <div className="rounded-xl border border-border bg-background/40 p-3"><p className="text-[11px] text-muted-foreground">{label}</p><p className={`text-sm font-semibold mt-1 ${active ? "text-emerald-300" : "text-amber-300"}`}>{value}</p></div>;
 }
 
-function Improvement({ title, text, priority }) {
-  const color = priority === "Alta" ? "text-red-300 bg-red-500/10 border-red-500/20" : "text-amber-300 bg-amber-500/10 border-amber-500/20";
-  return <div className="border border-border rounded-xl p-4 bg-background/40"><div className="flex items-start justify-between gap-3"><h3 className="text-sm font-semibold text-foreground">{title}</h3><span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${color}`}>{priority}</span></div><p className="text-xs text-muted-foreground mt-2 leading-relaxed">{text}</p></div>;
+function Module({ title, text, href, icon: Icon }) {
+  return <Link to={href} className="border border-border rounded-xl p-4 bg-background/40 hover:bg-white/[0.04] transition-colors"><div className="flex items-center gap-2"><Icon className="w-4 h-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">{title}</h3></div><p className="text-xs text-muted-foreground mt-2 leading-relaxed">{text}</p></Link>;
 }

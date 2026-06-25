@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, CheckCircle2, ClipboardCheck, Download, Grid3X3, MessageSquare, Target, TrendingUp, UserCheck } from "lucide-react";
+import { ArrowLeft, BarChart3, CheckCircle2, ClipboardCheck, Download, Grid3X3, MessageSquare, Save, Target, TrendingUp, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { base44 } from "@/api/base44Client";
 import { TYPE_COLORS, TYPE_NAMES } from "@/lib/enneagramData";
-
-const STORAGE_KEY = "ennea_performance_reviews";
 
 const COMPETENCIES = [
   "Entrega e produtividade",
@@ -23,20 +21,19 @@ function normalizeText(value) {
   return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function readReviews() {
+function safeParse(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
   try {
-    return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}");
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
   }
 }
 
-function writeReviews(data) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
 function average(values) {
-  const valid = values.map(Number).filter((v) => Number.isFinite(v));
+  const valid = values.map(Number).filter((v) => Number.isFinite(v) && v > 0);
   if (!valid.length) return 0;
   return Math.round((valid.reduce((a, b) => a + b, 0) / valid.length) * 10) / 10;
 }
@@ -73,17 +70,54 @@ function developmentSuggestion(type, score) {
   return base[type] || "Definir plano de desenvolvimento individual com metas objetivas.";
 }
 
+function fromDbReview(row) {
+  if (!row) return {};
+  return {
+    id: row.id,
+    result_id: row.result_id,
+    competencies: safeParse(row.competencies),
+    performance: Number(row.performance_score || 0),
+    potential: Number(row.potential_score || 0),
+    goals: Number(row.goals_score || 0),
+    final: Number(row.final_score || 0),
+    nineBox: row.nine_box || "",
+    managerFeedback: row.manager_feedback || "",
+    selfReview: row.self_review || "",
+    pdi: row.pdi || "",
+    cycle: row.cycle || "",
+    status: row.status || "draft",
+    updated_at: row.updated_date || ""
+  };
+}
+
+function csvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+}
+
 export default function PerformanceReview() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [search, setSearch] = useState("");
   const [reviews, setReviews] = useState({});
 
   useEffect(() => {
-    setReviews(readReviews());
-    base44.entities.TestResult.filter({ completed: true }, "-created_date", 1000)
-      .then((rows) => setResults(Array.isArray(rows) ? rows : []))
+    Promise.all([
+      base44.entities.TestResult.filter({ completed: true }, "-created_date", 1000),
+      base44.entities.PerformanceReview.filter({}, "-updated_date", 1000)
+    ])
+      .then(([resultRows, reviewRows]) => {
+        const cleanResults = Array.isArray(resultRows) ? resultRows : [];
+        setResults(cleanResults);
+        const mapped = {};
+        (Array.isArray(reviewRows) ? reviewRows : []).forEach((row) => {
+          if (row.result_id) mapped[row.result_id] = fromDbReview(row);
+        });
+        setReviews(mapped);
+        if (cleanResults[0]?.id) setSelectedId(cleanResults[0].id);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -104,15 +138,54 @@ export default function PerformanceReview() {
   const person = people.find((p) => p.id === selectedId) || filteredPeople[0];
   const review = person ? (reviews[person.id] || {}) : {};
   const competencyScores = COMPETENCIES.map((c) => Number(review.competencies?.[c] || 0));
-  const performanceScore = review.performance || average(competencyScores) || 3;
-  const potentialScore = review.potential || 3;
-  const finalScore = average([performanceScore, potentialScore, review.goals || 3]);
+  const performanceScore = Number(review.performance || 0) || average(competencyScores) || 3;
+  const potentialScore = Number(review.potential || 0) || 3;
+  const goalsScore = Number(review.goals || 0) || 3;
+  const finalScore = average([performanceScore, potentialScore, goalsScore]);
+  const box = nineBox(performanceScore, potentialScore);
+
+  async function persistReview(personRow, nextReview) {
+    if (!personRow) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const performance = Number(nextReview.performance || 0) || average(COMPETENCIES.map((c) => Number(nextReview.competencies?.[c] || 0))) || 3;
+      const potential = Number(nextReview.potential || 0) || 3;
+      const goals = Number(nextReview.goals || 0) || 3;
+      const final = average([performance, potential, goals]);
+      const saved = await base44.entities.PerformanceReview.create({
+        result_id: personRow.id,
+        participant_id: personRow.participant_id || "",
+        participant_name: personRow.participant_name || "",
+        participant_email: personRow.participant_email || "",
+        participant_company: personRow.participant_company || "",
+        participant_role: personRow.participant_role || "",
+        dominant_type: Number(personRow.dominant_type) || null,
+        performance_score: performance,
+        potential_score: potential,
+        goals_score: goals,
+        final_score: final,
+        nine_box: nineBox(performance, potential),
+        competencies: nextReview.competencies || {},
+        manager_feedback: nextReview.managerFeedback || "",
+        self_review: nextReview.selfReview || "",
+        pdi: nextReview.pdi || "",
+        cycle: nextReview.cycle || new Date().getFullYear().toString(),
+        status: nextReview.status || "draft"
+      });
+      setReviews((prev) => ({ ...prev, [personRow.id]: { ...nextReview, ...fromDbReview(saved) } }));
+    } catch (error) {
+      setSaveError(error.message || "Nao foi possivel salvar a avaliacao.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function updateReview(patch) {
     if (!person) return;
-    const next = { ...reviews, [person.id]: { ...review, ...patch, updated_at: new Date().toISOString() } };
-    setReviews(next);
-    writeReviews(next);
+    const nextReview = { ...review, ...patch, updated_at: new Date().toISOString() };
+    setReviews((prev) => ({ ...prev, [person.id]: nextReview }));
+    persistReview(person, nextReview);
   }
 
   function updateCompetency(name, value) {
@@ -124,13 +197,13 @@ export default function PerformanceReview() {
     people.forEach((p) => {
       const r = reviews[p.id] || {};
       const comp = average(COMPETENCIES.map((c) => Number(r.competencies?.[c] || 0)));
-      const perf = r.performance || comp || 0;
-      const pot = r.potential || 0;
-      const goals = r.goals || 0;
-      const final = average([perf, pot, goals].filter(Boolean));
+      const perf = Number(r.performance || 0) || comp || 0;
+      const pot = Number(r.potential || 0);
+      const goals = Number(r.goals || 0);
+      const final = average([perf, pot, goals]);
       rows.push([p.participant_name, p.participant_email, p.participant_company, p.participant_role, `Tipo ${p.dominant_type}`, perf, pot, goals, final, nineBox(perf, pot), r.pdi || ""]);
     });
-    const csv = rows.map((row) => row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
+    const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -151,16 +224,21 @@ export default function PerformanceReview() {
           <Link to="/admin" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
           </Link>
-          <Button onClick={exportCsv} className="gap-2 rounded-xl"><Download className="w-4 h-4" /> Exportar avaliações</Button>
+          <div className="flex items-center gap-3">
+            {saving && <span className="text-xs text-emerald-300 inline-flex items-center gap-1"><Save className="w-3 h-3" /> Salvando no D1...</span>}
+            <Button onClick={exportCsv} className="gap-2 rounded-xl"><Download className="w-4 h-4" /> Exportar avaliações</Button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 mb-8">
           <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center"><ClipboardCheck className="w-5 h-5 text-primary" /></div>
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground">Avaliação de Desempenho</h1>
-            <p className="text-sm text-muted-foreground">Metas, competências, feedback, PDI e matriz 9-box integrados ao perfil comportamental.</p>
+            <p className="text-sm text-muted-foreground">Metas, competências, feedback, PDI e matriz 9-box salvos no banco D1.</p>
           </div>
         </div>
+
+        {saveError && <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive px-4 py-3 text-sm">{saveError}</div>}
 
         <div className="grid lg:grid-cols-[320px_1fr] gap-6">
           <aside className="bg-card border border-border rounded-2xl p-4 h-fit">
@@ -181,7 +259,7 @@ export default function PerformanceReview() {
           </aside>
 
           {!person ? (
-            <div className="bg-card border border-border rounded-2xl p-10 text-center text-muted-foreground">Nenhum colaborador concluído encontrado.</div>
+            <div className="bg-card border border-border rounded-2xl p-10 text-center text-muted-foreground">Nenhum colaborador concluido encontrado.</div>
           ) : (
             <main className="space-y-6">
               <section className="bg-card border border-border rounded-2xl p-5">
@@ -189,13 +267,13 @@ export default function PerformanceReview() {
                   <div className="flex-1">
                     <p className="text-xs text-muted-foreground">Colaborador avaliado</p>
                     <h2 className="font-heading text-xl font-bold text-foreground">{person.participant_name}</h2>
-                    <p className="text-sm text-muted-foreground">{person.participant_company || "Sem empresa"} • {person.participant_role || "Sem cargo"} • Tipo {person.dominant_type} - {TYPE_NAMES[person.dominant_type]}</p>
+                    <p className="text-sm text-muted-foreground">{person.participant_company || "Sem empresa"} - {person.participant_role || "Sem cargo"} - Tipo {person.dominant_type} - {TYPE_NAMES[person.dominant_type]}</p>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <Metric icon={BarChart3} label="Desempenho" value={performanceScore} />
                     <Metric icon={TrendingUp} label="Potencial" value={potentialScore} />
-                    <Metric icon={Target} label="Metas" value={review.goals || 3} />
-                    <Metric icon={Grid3X3} label="9-box" value={nineBox(performanceScore, potentialScore)} small />
+                    <Metric icon={Target} label="Metas" value={goalsScore} />
+                    <Metric icon={Grid3X3} label="9-box" value={box} small />
                   </div>
                 </div>
               </section>
@@ -220,10 +298,10 @@ export default function PerformanceReview() {
                   <h3 className="font-heading text-base font-semibold text-foreground mb-4 flex items-center gap-2"><Grid3X3 className="w-4 h-4 text-primary" /> Calibração 9-box</h3>
                   <ScoreInput label="Desempenho geral" value={performanceScore} onChange={(v) => updateReview({ performance: Number(v) })} />
                   <ScoreInput label="Potencial futuro" value={potentialScore} onChange={(v) => updateReview({ potential: Number(v) })} />
-                  <ScoreInput label="Entrega de metas" value={review.goals || 3} onChange={(v) => updateReview({ goals: Number(v) })} />
+                  <ScoreInput label="Entrega de metas" value={goalsScore} onChange={(v) => updateReview({ goals: Number(v) })} />
                   <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 mt-4">
                     <p className="text-xs text-muted-foreground">Classificação</p>
-                    <p className="text-lg font-bold text-primary mt-1">{nineBox(performanceScore, potentialScore)}</p>
+                    <p className="text-lg font-bold text-primary mt-1">{box}</p>
                     <p className="text-xs text-muted-foreground mt-2">Nota final estimada: {finalScore}/5</p>
                   </div>
                 </div>

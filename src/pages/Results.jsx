@@ -80,6 +80,11 @@ export default function Results() {
                 Tipo {dominantType} - {result.dominant_type_name}
               </h1>
               <p className="text-muted-foreground text-sm mt-1">{dominantDetail?.subtitle}</p>
+              {result.recalculated && (
+                <p className="mt-3 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 inline-block">
+                  Resultado recalculado com a nova regra de desempate. {result.result_note || scores.resultNote || "Analise tambem o ranking completo."}
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-3 mt-4 justify-center sm:justify-start">
                 <span className="inline-flex items-center gap-1.5 bg-primary/15 text-primary px-3 py-1.5 rounded-lg text-sm font-bold">
                   <Trophy className="w-4 h-4" /> {result.confidence_level}% aderencia

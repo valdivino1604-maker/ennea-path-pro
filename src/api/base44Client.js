@@ -1,6 +1,8 @@
 import {
   createParticipant,
   createResult,
+  deleteParticipant,
+  deleteResult,
   filterParticipants,
   filterResults,
   updateParticipant,
@@ -30,12 +32,14 @@ export const base44 = {
     TestParticipant: {
       create: async (data) => createParticipant(data),
       filter: async (filter = {}, sort, limit) => filterParticipants(filter, sort, limit),
-      update: async (id, patch) => updateParticipant(id, patch)
+      update: async (id, patch) => updateParticipant(id, patch),
+      delete: async (id) => deleteParticipant(id)
     },
     TestResult: {
       create: async (data) => createResult(data),
       filter: async (filter = {}, sort, limit) => filterResults(filter, sort, limit),
-      update: async (id, patch) => updateResult(id, patch)
+      update: async (id, patch) => updateResult(id, patch),
+      delete: async (id) => deleteResult(id)
     }
   },
   integrations: {

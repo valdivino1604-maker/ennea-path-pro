@@ -31,6 +31,10 @@ function queryString(filter = {}, sort, limit) {
   return text ? `?${text}` : "";
 }
 
+function completePlan(data = {}) {
+  return { ...data, plan: "premium" };
+}
+
 function parseJsonObject(value) {
   if (!value) return null;
   if (typeof value === "object") return value;
@@ -46,12 +50,13 @@ function withRecalculatedResult(result) {
   if (!result || !result.answers) return result;
 
   const answers = parseJsonObject(result.answers);
-  if (!answers || Object.keys(answers).length === 0) return result;
+  if (!answers || Object.keys(answers).length === 0) return { ...result, plan: "premium" };
 
   const recalculated = calculateResults(answers);
 
   return {
     ...result,
+    plan: "premium",
     scores: JSON.stringify(recalculated),
     dominant_type: recalculated.dominantType,
     dominant_type_name: recalculated.dominantTypeName,
@@ -66,22 +71,24 @@ function withRecalculatedResult(result) {
 export async function createParticipant(data) {
   return apiRequest("/api/participants", {
     method: "POST",
-    body: JSON.stringify(data)
+    body: JSON.stringify(completePlan(data))
   });
 }
 
 export async function getParticipant(id) {
-  return apiRequest(`/api/participants/${encodeURIComponent(id)}`);
+  const participant = await apiRequest(`/api/participants/${encodeURIComponent(id)}`);
+  return participant ? { ...participant, plan: "premium" } : participant;
 }
 
 export async function filterParticipants(filter = {}, sort, limit) {
-  return apiRequest(`/api/participants${queryString(filter, sort, limit)}`);
+  const participants = await apiRequest(`/api/participants${queryString(filter, sort, limit)}`);
+  return Array.isArray(participants) ? participants.map((item) => ({ ...item, plan: "premium" })) : participants;
 }
 
 export async function updateParticipant(id, patch) {
   return apiRequest(`/api/participants/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify(patch)
+    body: JSON.stringify(completePlan(patch))
   });
 }
 
@@ -94,7 +101,7 @@ export async function deleteParticipant(id) {
 export async function createResult(data) {
   const result = await apiRequest("/api/results", {
     method: "POST",
-    body: JSON.stringify(data)
+    body: JSON.stringify(completePlan(data))
   });
   return withRecalculatedResult(result);
 }
@@ -112,7 +119,7 @@ export async function filterResults(filter = {}, sort, limit) {
 export async function updateResult(id, patch) {
   const result = await apiRequest(`/api/results/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify(patch)
+    body: JSON.stringify(completePlan(patch))
   });
   return withRecalculatedResult(result);
 }

@@ -1,4 +1,5 @@
 import * as localStore from "@/lib/localStore";
+import { calculateResults } from "@/lib/testEngine";
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(path, {
@@ -31,6 +32,38 @@ function queryString(filter = {}, sort, limit) {
   return text ? `?${text}` : "";
 }
 
+function parseJsonObject(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function withRecalculatedResult(result) {
+  if (!result || !result.answers) return result;
+
+  const answers = parseJsonObject(result.answers);
+  if (!answers || Object.keys(answers).length === 0) return result;
+
+  const recalculated = calculateResults(answers);
+
+  return {
+    ...result,
+    scores: JSON.stringify(recalculated),
+    dominant_type: recalculated.dominantType,
+    dominant_type_name: recalculated.dominantTypeName,
+    wing: recalculated.wing,
+    wing_name: recalculated.wingName,
+    confidence_level: recalculated.confidence,
+    recalculated: true,
+    result_note: recalculated.resultNote
+  };
+}
+
 export async function createParticipant(data) {
   return apiRequest("/api/participants", {
     method: "POST",
@@ -54,18 +87,21 @@ export async function updateParticipant(id, patch) {
 }
 
 export async function createResult(data) {
-  return apiRequest("/api/results", {
+  const result = await apiRequest("/api/results", {
     method: "POST",
     body: JSON.stringify(data)
   });
+  return withRecalculatedResult(result);
 }
 
 export async function getResult(id) {
-  return apiRequest(`/api/results/${encodeURIComponent(id)}`);
+  const result = await apiRequest(`/api/results/${encodeURIComponent(id)}`);
+  return withRecalculatedResult(result);
 }
 
 export async function filterResults(filter = {}, sort, limit) {
-  return apiRequest(`/api/results${queryString(filter, sort, limit)}`);
+  const results = await apiRequest(`/api/results${queryString(filter, sort, limit)}`);
+  return Array.isArray(results) ? results.map(withRecalculatedResult) : results;
 }
 
 export async function updateResult(id, patch) {

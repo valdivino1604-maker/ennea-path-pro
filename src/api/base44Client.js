@@ -3,10 +3,14 @@ import {
   createResult,
   deleteParticipant,
   deleteResult,
+  deletePerformanceReview,
   filterParticipants,
   filterResults,
+  filterPerformanceReviews,
+  getPerformanceReview,
   updateParticipant,
-  updateResult
+  updateResult,
+  upsertPerformanceReview
 } from "@/lib/cloudStore";
 
 const disabledMessage = "Base44 foi desativado neste site.";
@@ -40,6 +44,13 @@ export const base44 = {
       filter: async (filter = {}, sort, limit) => filterResults(filter, sort, limit),
       update: async (id, patch) => updateResult(id, patch),
       delete: async (id) => deleteResult(id)
+    },
+    PerformanceReview: {
+      create: async (data) => upsertPerformanceReview(data),
+      filter: async (filter = {}, sort, limit) => filterPerformanceReviews(filter, sort, limit),
+      get: async (id) => getPerformanceReview(id),
+      update: async (id, patch) => upsertPerformanceReview({ ...patch, result_id: patch.result_id || id }),
+      delete: async (id) => deletePerformanceReview(id)
     }
   },
   integrations: {

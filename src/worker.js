@@ -36,7 +36,7 @@ async function ensureSchema(env) {
         role TEXT,
         birth_date TEXT,
         gender TEXT,
-        plan TEXT DEFAULT 'basico',
+        plan TEXT DEFAULT 'premium',
         answers TEXT DEFAULT '{}',
         current_index INTEGER DEFAULT 0,
         created_date TEXT NOT NULL,
@@ -52,7 +52,7 @@ async function ensureSchema(env) {
         participant_company TEXT,
         participant_role TEXT,
         participant_birth_date TEXT,
-        plan TEXT DEFAULT 'basico',
+        plan TEXT DEFAULT 'premium',
         answers TEXT NOT NULL,
         scores TEXT NOT NULL,
         dominant_type INTEGER,
@@ -89,7 +89,36 @@ async function ensureSchema(env) {
         created_date TEXT NOT NULL
       )
     `),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_sessions_token_hash ON admin_sessions(token_hash)")
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_admin_sessions_token_hash ON admin_sessions(token_hash)"),
+    env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS performance_reviews (
+        id TEXT PRIMARY KEY,
+        result_id TEXT NOT NULL UNIQUE,
+        participant_id TEXT,
+        participant_name TEXT,
+        participant_email TEXT,
+        participant_company TEXT,
+        participant_role TEXT,
+        dominant_type INTEGER,
+        performance_score REAL DEFAULT 0,
+        potential_score REAL DEFAULT 0,
+        goals_score REAL DEFAULT 0,
+        final_score REAL DEFAULT 0,
+        nine_box TEXT,
+        competencies TEXT DEFAULT '{}',
+        manager_feedback TEXT DEFAULT '',
+        self_review TEXT DEFAULT '',
+        pdi TEXT DEFAULT '',
+        evaluator_name TEXT DEFAULT '',
+        cycle TEXT DEFAULT '',
+        status TEXT DEFAULT 'draft',
+        created_date TEXT NOT NULL,
+        updated_date TEXT NOT NULL
+      )
+    `),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_performance_reviews_result_id ON performance_reviews(result_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_performance_reviews_company ON performance_reviews(participant_company)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_performance_reviews_updated_date ON performance_reviews(updated_date)")
   ]);
 
   schemaReady = true;
@@ -226,7 +255,7 @@ async function createParticipant(request, env) {
   const participant = {
     id: makeId("participant"), full_name: data.full_name || "", email: data.email || "", phone: data.phone || "",
     company: data.company || "", role: data.role || "", birth_date: data.birth_date || "", gender: data.gender || "",
-    plan: data.plan || "basico", answers: "{}", current_index: 0, created_date: now, updated_date: now
+    plan: data.plan || "premium", answers: "{}", current_index: 0, created_date: now, updated_date: now
   };
   await env.DB.prepare(`
     INSERT INTO participants (id, full_name, email, phone, company, role, birth_date, gender, plan, answers, current_index, created_date, updated_date)
@@ -264,10 +293,11 @@ async function updateParticipant(id, request, env) {
     SET full_name = ?, email = ?, phone = ?, company = ?, role = ?, birth_date = ?, gender = ?, plan = ?, answers = ?, current_index = ?, updated_date = ?
     WHERE id = ?
   `).bind(updated.full_name, updated.email, updated.phone, updated.company, updated.role, updated.birth_date, updated.gender, updated.plan, updated.answers, updated.current_index, updated.updated_date, id).run();
-  if (Object.prototype.hasOwnProperty.call(data, "company")) {
-    await env.DB.prepare("UPDATE results SET participant_company = ?, updated_date = ? WHERE participant_id = ? OR lower(participant_email) = lower(?)")
-      .bind(updated.company, updated.updated_date, id, updated.email || current.email || "").run();
-  }
+  await env.DB.prepare(`
+    UPDATE results
+    SET participant_name = ?, participant_email = ?, participant_company = ?, participant_role = ?, updated_date = ?
+    WHERE participant_id = ? OR lower(participant_email) = lower(?)
+  `).bind(updated.full_name, updated.email, updated.company, updated.role, updated.updated_date, id, updated.email || current.email || "").run();
   return json(updated);
 }
 
@@ -275,6 +305,7 @@ async function deleteParticipant(id, env) {
   const current = await env.DB.prepare("SELECT * FROM participants WHERE id = ?").bind(id).first();
   if (!current) return json({ error: "Participante nao encontrado." }, 404);
   await env.DB.prepare("DELETE FROM results WHERE participant_id = ? OR lower(participant_email) = lower(?)").bind(id, current.email || "").run();
+  await env.DB.prepare("DELETE FROM performance_reviews WHERE participant_id = ? OR lower(participant_email) = lower(?)").bind(id, current.email || "").run();
   await env.DB.prepare("DELETE FROM participants WHERE id = ?").bind(id).run();
   return json({ ok: true, deleted: "participant", id });
 }
@@ -291,7 +322,7 @@ async function createResult(request, env) {
   const result = {
     id: makeId("result"), participant_id: data.participant_id || "", participant_name: data.participant_name || "",
     participant_email: data.participant_email || "", participant_company: data.participant_company || "", participant_role: data.participant_role || "",
-    participant_birth_date: data.participant_birth_date || "", plan: data.plan || "basico", answers: data.answers || "{}",
+    participant_birth_date: data.participant_birth_date || "", plan: data.plan || "premium", answers: data.answers || "{}",
     scores: data.scores || "{}", dominant_type: data.dominant_type || null, dominant_type_name: data.dominant_type_name || "",
     wing: data.wing == null ? "" : String(data.wing), wing_name: data.wing_name || "", confidence_level: data.confidence_level || 0,
     duration_seconds: data.duration_seconds || 0, completed: data.completed ? 1 : 0, created_date: now, updated_date: now
@@ -328,8 +359,9 @@ async function updateResult(id, request, env) {
     SET participant_name = ?, participant_email = ?, participant_company = ?, participant_role = ?, participant_birth_date = ?, plan = ?, updated_date = ?
     WHERE id = ?
   `).bind(updated.participant_name, updated.participant_email, updated.participant_company, updated.participant_role, updated.participant_birth_date, updated.plan, updated.updated_date, id).run();
-  if (Object.prototype.hasOwnProperty.call(data, "participant_company") && updated.participant_id) {
-    await env.DB.prepare("UPDATE participants SET company = ?, updated_date = ? WHERE id = ?").bind(updated.participant_company, updated.updated_date, updated.participant_id).run();
+  if (updated.participant_id) {
+    await env.DB.prepare("UPDATE participants SET full_name = ?, company = ?, role = ?, updated_date = ? WHERE id = ?")
+      .bind(updated.participant_name, updated.participant_company, updated.participant_role, updated.updated_date, updated.participant_id).run();
   }
   return json({ ...updated, completed: Boolean(updated.completed) });
 }
@@ -337,6 +369,7 @@ async function updateResult(id, request, env) {
 async function deleteResult(id, env) {
   const current = await env.DB.prepare("SELECT * FROM results WHERE id = ?").bind(id).first();
   if (!current) return json({ error: "Resultado nao encontrado." }, 404);
+  await env.DB.prepare("DELETE FROM performance_reviews WHERE result_id = ?").bind(id).run();
   await env.DB.prepare("DELETE FROM results WHERE id = ?").bind(id).run();
   if (current.participant_id) {
     await env.DB.prepare("DELETE FROM participants WHERE id = ?").bind(current.participant_id).run();
@@ -352,6 +385,101 @@ async function listResults(url, env) {
     : env.DB.prepare("SELECT * FROM results ORDER BY created_date DESC LIMIT ?").bind(limit);
   const { results } = await statement.all();
   return json((results || []).map((result) => ({ ...result, completed: Boolean(result.completed) })));
+}
+
+function publicReview(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    competencies: row.competencies || "{}",
+    performance_score: Number(row.performance_score || 0),
+    potential_score: Number(row.potential_score || 0),
+    goals_score: Number(row.goals_score || 0),
+    final_score: Number(row.final_score || 0)
+  };
+}
+
+async function listPerformanceReviews(url, env) {
+  const resultId = url.searchParams.get("result_id");
+  const limit = Math.min(Number(url.searchParams.get("limit") || 1000), 1000);
+  const statement = resultId
+    ? env.DB.prepare("SELECT * FROM performance_reviews WHERE result_id = ? LIMIT ?").bind(resultId, limit)
+    : env.DB.prepare("SELECT * FROM performance_reviews ORDER BY updated_date DESC LIMIT ?").bind(limit);
+  const { results } = await statement.all();
+  return json((results || []).map(publicReview));
+}
+
+async function getPerformanceReview(id, env) {
+  const row = await env.DB.prepare("SELECT * FROM performance_reviews WHERE id = ? OR result_id = ?").bind(id, id).first();
+  if (!row) return json({ error: "Avaliacao nao encontrada." }, 404);
+  return json(publicReview(row));
+}
+
+async function upsertPerformanceReview(request, env) {
+  const data = await readJson(request);
+  const now = new Date().toISOString();
+  const resultId = String(data.result_id || "").trim();
+  if (!resultId) return json({ error: "result_id e obrigatorio." }, 400);
+
+  const existing = await env.DB.prepare("SELECT * FROM performance_reviews WHERE result_id = ?").bind(resultId).first();
+  const result = await env.DB.prepare("SELECT * FROM results WHERE id = ?").bind(resultId).first();
+  const id = existing?.id || makeId("review");
+  const review = {
+    id,
+    result_id: resultId,
+    participant_id: data.participant_id ?? existing?.participant_id ?? result?.participant_id ?? "",
+    participant_name: data.participant_name ?? existing?.participant_name ?? result?.participant_name ?? "",
+    participant_email: data.participant_email ?? existing?.participant_email ?? result?.participant_email ?? "",
+    participant_company: data.participant_company ?? existing?.participant_company ?? result?.participant_company ?? "",
+    participant_role: data.participant_role ?? existing?.participant_role ?? result?.participant_role ?? "",
+    dominant_type: data.dominant_type ?? existing?.dominant_type ?? result?.dominant_type ?? null,
+    performance_score: Number(data.performance_score ?? existing?.performance_score ?? 0),
+    potential_score: Number(data.potential_score ?? existing?.potential_score ?? 0),
+    goals_score: Number(data.goals_score ?? existing?.goals_score ?? 0),
+    final_score: Number(data.final_score ?? existing?.final_score ?? 0),
+    nine_box: data.nine_box ?? existing?.nine_box ?? "",
+    competencies: typeof data.competencies === "string" ? data.competencies : JSON.stringify(data.competencies || JSON.parse(existing?.competencies || "{}")),
+    manager_feedback: data.manager_feedback ?? existing?.manager_feedback ?? "",
+    self_review: data.self_review ?? existing?.self_review ?? "",
+    pdi: data.pdi ?? existing?.pdi ?? "",
+    evaluator_name: data.evaluator_name ?? existing?.evaluator_name ?? "",
+    cycle: data.cycle ?? existing?.cycle ?? "",
+    status: data.status ?? existing?.status ?? "draft",
+    created_date: existing?.created_date || now,
+    updated_date: now
+  };
+
+  await env.DB.prepare(`
+    INSERT INTO performance_reviews (id, result_id, participant_id, participant_name, participant_email, participant_company, participant_role, dominant_type, performance_score, potential_score, goals_score, final_score, nine_box, competencies, manager_feedback, self_review, pdi, evaluator_name, cycle, status, created_date, updated_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(result_id) DO UPDATE SET
+      participant_id = excluded.participant_id,
+      participant_name = excluded.participant_name,
+      participant_email = excluded.participant_email,
+      participant_company = excluded.participant_company,
+      participant_role = excluded.participant_role,
+      dominant_type = excluded.dominant_type,
+      performance_score = excluded.performance_score,
+      potential_score = excluded.potential_score,
+      goals_score = excluded.goals_score,
+      final_score = excluded.final_score,
+      nine_box = excluded.nine_box,
+      competencies = excluded.competencies,
+      manager_feedback = excluded.manager_feedback,
+      self_review = excluded.self_review,
+      pdi = excluded.pdi,
+      evaluator_name = excluded.evaluator_name,
+      cycle = excluded.cycle,
+      status = excluded.status,
+      updated_date = excluded.updated_date
+  `).bind(review.id, review.result_id, review.participant_id, review.participant_name, review.participant_email, review.participant_company, review.participant_role, review.dominant_type, review.performance_score, review.potential_score, review.goals_score, review.final_score, review.nine_box, review.competencies, review.manager_feedback, review.self_review, review.pdi, review.evaluator_name, review.cycle, review.status, review.created_date, review.updated_date).run();
+
+  return json(publicReview(review), existing ? 200 : 201);
+}
+
+async function deletePerformanceReview(id, env) {
+  await env.DB.prepare("DELETE FROM performance_reviews WHERE id = ? OR result_id = ?").bind(id, id).run();
+  return json({ ok: true, deleted: "performance_review", id });
 }
 
 async function handleApi(request, env) {
@@ -384,6 +512,14 @@ async function handleApi(request, env) {
   if (resultMatch && method === "GET") return getResult(resultMatch[1], env);
   if (resultMatch && method === "PATCH") return updateResult(resultMatch[1], request, env);
   if (resultMatch && method === "DELETE") return deleteResult(resultMatch[1], env);
+
+  if (pathname === "/api/performance-reviews" && method === "GET") return listPerformanceReviews(url, env);
+  if (pathname === "/api/performance-reviews" && method === "POST") return upsertPerformanceReview(request, env);
+
+  const reviewMatch = pathname.match(/^\/api\/performance-reviews\/([^/]+)$/);
+  if (reviewMatch && method === "GET") return getPerformanceReview(reviewMatch[1], env);
+  if (reviewMatch && method === "PATCH") return upsertPerformanceReview(request, env);
+  if (reviewMatch && method === "DELETE") return deletePerformanceReview(reviewMatch[1], env);
 
   return json({ error: "Rota nao encontrada." }, 404);
 }

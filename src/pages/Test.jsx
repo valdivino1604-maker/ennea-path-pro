@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Clock, CheckCircle2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { QUESTIONS, LIKERT_OPTIONS, calculateResults } from "@/lib/enneagramData";
+import { QUESTIONS, LIKERT_OPTIONS, calculateResults } from "@/lib/testEngine";
 import { createResult, getParticipant, updateParticipant } from "@/lib/cloudStore";
 
 export default function Test() {

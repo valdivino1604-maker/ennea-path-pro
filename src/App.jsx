@@ -19,6 +19,7 @@ import DevelopmentPlan from '@/pages/DevelopmentPlan';
 import BehavioralHistory from '@/pages/BehavioralHistory';
 import AILeadership from '@/pages/AILeadership';
 import Reports from '@/pages/Reports';
+import AdminSettings from '@/pages/AdminSettings';
 import AdminGuard from '@/components/AdminGuard';
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
             <Route path="/admin/behavioral-history" element={<AdminGuard><BehavioralHistory /></AdminGuard>} />
             <Route path="/admin/ai-leadership" element={<AdminGuard><AILeadership /></AdminGuard>} />
             <Route path="/admin/reports" element={<AdminGuard><Reports /></AdminGuard>} />
+            <Route path="/admin/settings" element={<AdminGuard><AdminSettings /></AdminGuard>} />
             <Route path="*" element={<PageNotFound />} />
           </Routes>
         </Router>

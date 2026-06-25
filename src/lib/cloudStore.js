@@ -85,6 +85,12 @@ export async function updateParticipant(id, patch) {
   });
 }
 
+export async function deleteParticipant(id) {
+  return apiRequest(`/api/participants/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
 export async function createResult(data) {
   const result = await apiRequest("/api/results", {
     method: "POST",
@@ -109,4 +115,10 @@ export async function updateResult(id, patch) {
     body: JSON.stringify(patch)
   });
   return withRecalculatedResult(result);
+}
+
+export async function deleteResult(id) {
+  return apiRequest(`/api/results/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
 }

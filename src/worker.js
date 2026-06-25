@@ -6,10 +6,7 @@ const jsonHeaders = {
 };
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: jsonHeaders
-  });
+  return new Response(JSON.stringify(data), { status, headers: jsonHeaders });
 }
 
 function makeId(prefix) {
@@ -25,13 +22,8 @@ async function readJson(request) {
 }
 
 async function ensureSchema(env) {
-  if (!env.DB) {
-    return false;
-  }
-
-  if (schemaReady) {
-    return true;
-  }
+  if (!env.DB) return false;
+  if (schemaReady) return true;
 
   await env.DB.batch([
     env.DB.prepare(`
@@ -179,21 +171,15 @@ async function setupStatus(env) {
 
 async function setupAdmin(request, env) {
   const countRow = await env.DB.prepare("SELECT COUNT(*) AS count FROM admin_users").first();
-  if (Number(countRow?.count || 0) > 0) {
-    return json({ error: "O acesso master ja foi criado." }, 409);
-  }
+  if (Number(countRow?.count || 0) > 0) return json({ error: "O acesso master ja foi criado." }, 409);
 
   const data = await readJson(request);
   const email = String(data.email || "").trim().toLowerCase();
   const fullName = String(data.full_name || data.name || "Master").trim();
   const password = String(data.password || "");
 
-  if (!email || !email.includes("@")) {
-    return json({ error: "Informe um e-mail valido." }, 400);
-  }
-  if (password.length < 6) {
-    return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
-  }
+  if (!email || !email.includes("@")) return json({ error: "Informe um e-mail valido." }, 400);
+  if (password.length < 6) return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
 
   const now = new Date().toISOString();
   const salt = crypto.randomUUID();
@@ -209,9 +195,7 @@ async function setupAdmin(request, env) {
   };
 
   await env.DB.prepare(`
-    INSERT INTO admin_users (
-      id, full_name, email, role, password_salt, password_hash, created_date, updated_date
-    )
+    INSERT INTO admin_users (id, full_name, email, role, password_salt, password_hash, created_date, updated_date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     adminUser.id,
@@ -227,10 +211,7 @@ async function setupAdmin(request, env) {
   const token = await createAdminSession(env, adminUser);
   return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), {
     status: 201,
-    headers: {
-      ...jsonHeaders,
-      "set-cookie": sessionCookie(token)
-    }
+    headers: { ...jsonHeaders, "set-cookie": sessionCookie(token) }
   });
 }
 
@@ -240,30 +221,21 @@ async function loginAdmin(request, env) {
   const password = String(data.password || "");
 
   const adminUser = await env.DB.prepare("SELECT * FROM admin_users WHERE email = ? LIMIT 1").bind(email).first();
-  if (!adminUser) {
-    return json({ error: "E-mail ou senha invalidos." }, 401);
-  }
+  if (!adminUser) return json({ error: "E-mail ou senha invalidos." }, 401);
 
   const hash = await passwordHash(password, adminUser.password_salt);
-  if (hash !== adminUser.password_hash) {
-    return json({ error: "E-mail ou senha invalidos." }, 401);
-  }
+  if (hash !== adminUser.password_hash) return json({ error: "E-mail ou senha invalidos." }, 401);
 
   const token = await createAdminSession(env, adminUser);
   return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), {
     status: 200,
-    headers: {
-      ...jsonHeaders,
-      "set-cookie": sessionCookie(token)
-    }
+    headers: { ...jsonHeaders, "set-cookie": sessionCookie(token) }
   });
 }
 
 async function currentAdmin(request, env) {
   const adminUser = await getAdminFromRequest(request, env);
-  if (!adminUser) {
-    return json({ user: null, isAuthenticated: false }, 401);
-  }
+  if (!adminUser) return json({ user: null, isAuthenticated: false }, 401);
   return json({ user: publicAdmin(adminUser), isAuthenticated: true });
 }
 
@@ -276,10 +248,7 @@ async function logoutAdmin(request, env) {
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
-    headers: {
-      ...jsonHeaders,
-      "set-cookie": sessionCookie("", 0)
-    }
+    headers: { ...jsonHeaders, "set-cookie": sessionCookie("", 0) }
   });
 }
 
@@ -314,10 +283,7 @@ async function createParticipant(request, env) {
   };
 
   await env.DB.prepare(`
-    INSERT INTO participants (
-      id, full_name, email, phone, company, role, birth_date, gender, plan,
-      answers, current_index, created_date, updated_date
-    )
+    INSERT INTO participants (id, full_name, email, phone, company, role, birth_date, gender, plan, answers, current_index, created_date, updated_date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     participant.id,
@@ -340,21 +306,25 @@ async function createParticipant(request, env) {
 
 async function getParticipant(id, env) {
   const participant = await env.DB.prepare("SELECT * FROM participants WHERE id = ?").bind(id).first();
-  if (!participant) {
-    return json({ error: "Participante nao encontrado." }, 404);
-  }
+  if (!participant) return json({ error: "Participante nao encontrado." }, 404);
   return json(participant);
 }
 
 async function updateParticipant(id, request, env) {
   const data = await readJson(request);
   const current = await env.DB.prepare("SELECT * FROM participants WHERE id = ?").bind(id).first();
-  if (!current) {
-    return json({ error: "Participante nao encontrado." }, 404);
-  }
+  if (!current) return json({ error: "Participante nao encontrado." }, 404);
 
   const updated = {
     ...current,
+    full_name: data.full_name ?? current.full_name,
+    email: data.email ?? current.email,
+    phone: data.phone ?? current.phone,
+    company: data.company ?? current.company,
+    role: data.role ?? current.role,
+    birth_date: data.birth_date ?? current.birth_date,
+    gender: data.gender ?? current.gender,
+    plan: data.plan ?? current.plan,
     answers: data.answers ?? current.answers,
     current_index: data.current_index ?? current.current_index,
     updated_date: new Date().toISOString()
@@ -362,20 +332,37 @@ async function updateParticipant(id, request, env) {
 
   await env.DB.prepare(`
     UPDATE participants
-    SET answers = ?, current_index = ?, updated_date = ?
+    SET full_name = ?, email = ?, phone = ?, company = ?, role = ?, birth_date = ?, gender = ?, plan = ?, answers = ?, current_index = ?, updated_date = ?
     WHERE id = ?
-  `).bind(updated.answers, updated.current_index, updated.updated_date, id).run();
+  `).bind(
+    updated.full_name,
+    updated.email,
+    updated.phone,
+    updated.company,
+    updated.role,
+    updated.birth_date,
+    updated.gender,
+    updated.plan,
+    updated.answers,
+    updated.current_index,
+    updated.updated_date,
+    id
+  ).run();
+
+  if (Object.prototype.hasOwnProperty.call(data, "company")) {
+    await env.DB.prepare(`
+      UPDATE results
+      SET participant_company = ?, updated_date = ?
+      WHERE participant_id = ? OR lower(participant_email) = lower(?)
+    `).bind(updated.company, updated.updated_date, id, updated.email || current.email || "").run();
+  }
 
   return json(updated);
 }
 
 async function listParticipants(url, env) {
   const limit = Math.min(Number(url.searchParams.get("limit") || 500), 1000);
-  const { results } = await env.DB.prepare(`
-    SELECT * FROM participants
-    ORDER BY created_date DESC
-    LIMIT ?
-  `).bind(limit).all();
+  const { results } = await env.DB.prepare("SELECT * FROM participants ORDER BY created_date DESC LIMIT ?").bind(limit).all();
   return json(results || []);
 }
 
@@ -405,12 +392,7 @@ async function createResult(request, env) {
   };
 
   await env.DB.prepare(`
-    INSERT INTO results (
-      id, participant_id, participant_name, participant_email, participant_company,
-      participant_role, participant_birth_date, plan, answers, scores, dominant_type,
-      dominant_type_name, wing, wing_name, confidence_level, duration_seconds,
-      completed, created_date, updated_date
-    )
+    INSERT INTO results (id, participant_id, participant_name, participant_email, participant_company, participant_role, participant_birth_date, plan, answers, scores, dominant_type, dominant_type_name, wing, wing_name, confidence_level, duration_seconds, completed, created_date, updated_date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     result.id,
@@ -439,31 +421,56 @@ async function createResult(request, env) {
 
 async function getResult(id, env) {
   const result = await env.DB.prepare("SELECT * FROM results WHERE id = ?").bind(id).first();
-  if (!result) {
-    return json({ error: "Resultado nao encontrado." }, 404);
-  }
+  if (!result) return json({ error: "Resultado nao encontrado." }, 404);
   return json({ ...result, completed: Boolean(result.completed) });
+}
+
+async function updateResult(id, request, env) {
+  const data = await readJson(request);
+  const current = await env.DB.prepare("SELECT * FROM results WHERE id = ?").bind(id).first();
+  if (!current) return json({ error: "Resultado nao encontrado." }, 404);
+
+  const updated = {
+    ...current,
+    participant_name: data.participant_name ?? current.participant_name,
+    participant_email: data.participant_email ?? current.participant_email,
+    participant_company: data.participant_company ?? current.participant_company,
+    participant_role: data.participant_role ?? current.participant_role,
+    participant_birth_date: data.participant_birth_date ?? current.participant_birth_date,
+    plan: data.plan ?? current.plan,
+    updated_date: new Date().toISOString()
+  };
+
+  await env.DB.prepare(`
+    UPDATE results
+    SET participant_name = ?, participant_email = ?, participant_company = ?, participant_role = ?, participant_birth_date = ?, plan = ?, updated_date = ?
+    WHERE id = ?
+  `).bind(
+    updated.participant_name,
+    updated.participant_email,
+    updated.participant_company,
+    updated.participant_role,
+    updated.participant_birth_date,
+    updated.plan,
+    updated.updated_date,
+    id
+  ).run();
+
+  if (Object.prototype.hasOwnProperty.call(data, "participant_company") && updated.participant_id) {
+    await env.DB.prepare("UPDATE participants SET company = ?, updated_date = ? WHERE id = ?")
+      .bind(updated.participant_company, updated.updated_date, updated.participant_id)
+      .run();
+  }
+
+  return json({ ...updated, completed: Boolean(updated.completed) });
 }
 
 async function listResults(url, env) {
   const participantId = url.searchParams.get("participant_id");
   const limit = Math.min(Number(url.searchParams.get("limit") || 500), 1000);
-  let statement;
-
-  if (participantId) {
-    statement = env.DB.prepare(`
-      SELECT * FROM results
-      WHERE participant_id = ?
-      ORDER BY created_date DESC
-      LIMIT ?
-    `).bind(participantId, limit);
-  } else {
-    statement = env.DB.prepare(`
-      SELECT * FROM results
-      ORDER BY created_date DESC
-      LIMIT ?
-    `).bind(limit);
-  }
+  const statement = participantId
+    ? env.DB.prepare("SELECT * FROM results WHERE participant_id = ? ORDER BY created_date DESC LIMIT ?").bind(participantId, limit)
+    : env.DB.prepare("SELECT * FROM results ORDER BY created_date DESC LIMIT ?").bind(limit);
 
   const { results } = await statement.all();
   return json((results || []).map((result) => ({ ...result, completed: Boolean(result.completed) })));
@@ -479,58 +486,26 @@ async function handleApi(request, env) {
   const { pathname } = url;
   const method = request.method.toUpperCase();
 
-  if (pathname === "/api/health") {
-    return json({ ok: true, database: "D1" });
-  }
+  if (pathname === "/api/health") return json({ ok: true, database: "D1" });
+  if (pathname === "/api/admin/setup-status" && method === "GET") return setupStatus(env);
+  if (pathname === "/api/admin/setup" && method === "POST") return setupAdmin(request, env);
+  if (pathname === "/api/admin/login" && method === "POST") return loginAdmin(request, env);
+  if (pathname === "/api/admin/me" && method === "GET") return currentAdmin(request, env);
+  if (pathname === "/api/admin/logout" && method === "POST") return logoutAdmin(request, env);
 
-  if (pathname === "/api/admin/setup-status" && method === "GET") {
-    return setupStatus(env);
-  }
-
-  if (pathname === "/api/admin/setup" && method === "POST") {
-    return setupAdmin(request, env);
-  }
-
-  if (pathname === "/api/admin/login" && method === "POST") {
-    return loginAdmin(request, env);
-  }
-
-  if (pathname === "/api/admin/me" && method === "GET") {
-    return currentAdmin(request, env);
-  }
-
-  if (pathname === "/api/admin/logout" && method === "POST") {
-    return logoutAdmin(request, env);
-  }
-
-  if (pathname === "/api/participants" && method === "POST") {
-    return createParticipant(request, env);
-  }
-
-  if (pathname === "/api/participants" && method === "GET") {
-    return listParticipants(url, env);
-  }
+  if (pathname === "/api/participants" && method === "POST") return createParticipant(request, env);
+  if (pathname === "/api/participants" && method === "GET") return listParticipants(url, env);
 
   const participantMatch = pathname.match(/^\/api\/participants\/([^/]+)$/);
-  if (participantMatch && method === "GET") {
-    return getParticipant(participantMatch[1], env);
-  }
-  if (participantMatch && method === "PATCH") {
-    return updateParticipant(participantMatch[1], request, env);
-  }
+  if (participantMatch && method === "GET") return getParticipant(participantMatch[1], env);
+  if (participantMatch && method === "PATCH") return updateParticipant(participantMatch[1], request, env);
 
-  if (pathname === "/api/results" && method === "POST") {
-    return createResult(request, env);
-  }
-
-  if (pathname === "/api/results" && method === "GET") {
-    return listResults(url, env);
-  }
+  if (pathname === "/api/results" && method === "POST") return createResult(request, env);
+  if (pathname === "/api/results" && method === "GET") return listResults(url, env);
 
   const resultMatch = pathname.match(/^\/api\/results\/([^/]+)$/);
-  if (resultMatch && method === "GET") {
-    return getResult(resultMatch[1], env);
-  }
+  if (resultMatch && method === "GET") return getResult(resultMatch[1], env);
+  if (resultMatch && method === "PATCH") return updateResult(resultMatch[1], request, env);
 
   return json({ error: "Rota nao encontrada." }, 404);
 }
@@ -538,18 +513,11 @@ async function handleApi(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
     try {
-      if (url.pathname.startsWith("/api/")) {
-        return handleApi(request, env);
-      }
-
+      if (url.pathname.startsWith("/api/")) return handleApi(request, env);
       return env.ASSETS.fetch(request);
     } catch (error) {
-      return json({
-        error: "Erro interno.",
-        detail: error.message
-      }, 500);
+      return json({ error: "Erro interno.", detail: error.message }, 500);
     }
   }
 };

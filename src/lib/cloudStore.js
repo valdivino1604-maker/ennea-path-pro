@@ -1,4 +1,3 @@
-import * as localStore from "@/lib/localStore";
 import { calculateResults } from "@/lib/testEngine";
 
 async function apiRequest(path, options = {}) {
@@ -105,5 +104,9 @@ export async function filterResults(filter = {}, sort, limit) {
 }
 
 export async function updateResult(id, patch) {
-  return localStore.updateResult(id, patch);
+  const result = await apiRequest(`/api/results/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
+  return withRecalculatedResult(result);
 }

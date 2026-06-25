@@ -139,29 +139,20 @@ async function createAdminSession(env, adminUser) {
 
 function publicAdmin(adminUser) {
   if (!adminUser) return null;
-  return {
-    id: adminUser.id,
-    full_name: adminUser.full_name,
-    email: adminUser.email,
-    role: adminUser.role
-  };
+  return { id: adminUser.id, full_name: adminUser.full_name, email: adminUser.email, role: adminUser.role };
 }
 
 async function getAdminFromRequest(request, env) {
   const token = getCookie(request, "ennea_admin_session");
   if (!token) return null;
-
   const tokenHash = await sha256Hex(token);
-  const row = await env.DB.prepare(`
+  return await env.DB.prepare(`
     SELECT admin_users.*
     FROM admin_sessions
     JOIN admin_users ON admin_users.id = admin_sessions.admin_user_id
-    WHERE admin_sessions.token_hash = ?
-      AND admin_sessions.expires_at > ?
+    WHERE admin_sessions.token_hash = ? AND admin_sessions.expires_at > ?
     LIMIT 1
   `).bind(tokenHash, new Date().toISOString()).first();
-
-  return row || null;
 }
 
 async function setupStatus(env) {
@@ -184,53 +175,29 @@ async function setupAdmin(request, env) {
   const now = new Date().toISOString();
   const salt = crypto.randomUUID();
   const adminUser = {
-    id: makeId("admin"),
-    full_name: fullName,
-    email,
-    role: "master",
-    password_salt: salt,
-    password_hash: await passwordHash(password, salt),
-    created_date: now,
-    updated_date: now
+    id: makeId("admin"), full_name: fullName, email, role: "master",
+    password_salt: salt, password_hash: await passwordHash(password, salt), created_date: now, updated_date: now
   };
 
   await env.DB.prepare(`
     INSERT INTO admin_users (id, full_name, email, role, password_salt, password_hash, created_date, updated_date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    adminUser.id,
-    adminUser.full_name,
-    adminUser.email,
-    adminUser.role,
-    adminUser.password_salt,
-    adminUser.password_hash,
-    adminUser.created_date,
-    adminUser.updated_date
-  ).run();
+  `).bind(adminUser.id, adminUser.full_name, adminUser.email, adminUser.role, adminUser.password_salt, adminUser.password_hash, adminUser.created_date, adminUser.updated_date).run();
 
   const token = await createAdminSession(env, adminUser);
-  return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), {
-    status: 201,
-    headers: { ...jsonHeaders, "set-cookie": sessionCookie(token) }
-  });
+  return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), { status: 201, headers: { ...jsonHeaders, "set-cookie": sessionCookie(token) } });
 }
 
 async function loginAdmin(request, env) {
   const data = await readJson(request);
   const email = String(data.email || "").trim().toLowerCase();
   const password = String(data.password || "");
-
   const adminUser = await env.DB.prepare("SELECT * FROM admin_users WHERE email = ? LIMIT 1").bind(email).first();
   if (!adminUser) return json({ error: "E-mail ou senha invalidos." }, 401);
-
   const hash = await passwordHash(password, adminUser.password_salt);
   if (hash !== adminUser.password_hash) return json({ error: "E-mail ou senha invalidos." }, 401);
-
   const token = await createAdminSession(env, adminUser);
-  return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), {
-    status: 200,
-    headers: { ...jsonHeaders, "set-cookie": sessionCookie(token) }
-  });
+  return new Response(JSON.stringify({ user: publicAdmin(adminUser) }), { status: 200, headers: { ...jsonHeaders, "set-cookie": sessionCookie(token) } });
 }
 
 async function currentAdmin(request, env) {
@@ -245,21 +212,11 @@ async function logoutAdmin(request, env) {
     const tokenHash = await sha256Hex(token);
     await env.DB.prepare("DELETE FROM admin_sessions WHERE token_hash = ?").bind(tokenHash).run();
   }
-
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { ...jsonHeaders, "set-cookie": sessionCookie("", 0) }
-  });
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...jsonHeaders, "set-cookie": sessionCookie("", 0) } });
 }
 
 function requireDb(env) {
-  if (!env.DB) {
-    return json({
-      error: "Banco D1 ainda nao foi ligado.",
-      code: "d1_missing_binding",
-      detail: "Crie um banco D1 e adicione um binding no Worker com o nome DB."
-    }, 500);
-  }
+  if (!env.DB) return json({ error: "Banco D1 ainda nao foi ligado.", code: "d1_missing_binding", detail: "Crie um banco D1 e adicione um binding no Worker com o nome DB." }, 500);
   return null;
 }
 
@@ -267,40 +224,14 @@ async function createParticipant(request, env) {
   const data = await readJson(request);
   const now = new Date().toISOString();
   const participant = {
-    id: makeId("participant"),
-    full_name: data.full_name || "",
-    email: data.email || "",
-    phone: data.phone || "",
-    company: data.company || "",
-    role: data.role || "",
-    birth_date: data.birth_date || "",
-    gender: data.gender || "",
-    plan: data.plan || "basico",
-    answers: "{}",
-    current_index: 0,
-    created_date: now,
-    updated_date: now
+    id: makeId("participant"), full_name: data.full_name || "", email: data.email || "", phone: data.phone || "",
+    company: data.company || "", role: data.role || "", birth_date: data.birth_date || "", gender: data.gender || "",
+    plan: data.plan || "basico", answers: "{}", current_index: 0, created_date: now, updated_date: now
   };
-
   await env.DB.prepare(`
     INSERT INTO participants (id, full_name, email, phone, company, role, birth_date, gender, plan, answers, current_index, created_date, updated_date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    participant.id,
-    participant.full_name,
-    participant.email,
-    participant.phone,
-    participant.company,
-    participant.role,
-    participant.birth_date,
-    participant.gender,
-    participant.plan,
-    participant.answers,
-    participant.current_index,
-    participant.created_date,
-    participant.updated_date
-  ).run();
-
+  `).bind(participant.id, participant.full_name, participant.email, participant.phone, participant.company, participant.role, participant.birth_date, participant.gender, participant.plan, participant.answers, participant.current_index, participant.created_date, participant.updated_date).run();
   return json(participant, 201);
 }
 
@@ -314,7 +245,6 @@ async function updateParticipant(id, request, env) {
   const data = await readJson(request);
   const current = await env.DB.prepare("SELECT * FROM participants WHERE id = ?").bind(id).first();
   if (!current) return json({ error: "Participante nao encontrado." }, 404);
-
   const updated = {
     ...current,
     full_name: data.full_name ?? current.full_name,
@@ -329,35 +259,24 @@ async function updateParticipant(id, request, env) {
     current_index: data.current_index ?? current.current_index,
     updated_date: new Date().toISOString()
   };
-
   await env.DB.prepare(`
     UPDATE participants
     SET full_name = ?, email = ?, phone = ?, company = ?, role = ?, birth_date = ?, gender = ?, plan = ?, answers = ?, current_index = ?, updated_date = ?
     WHERE id = ?
-  `).bind(
-    updated.full_name,
-    updated.email,
-    updated.phone,
-    updated.company,
-    updated.role,
-    updated.birth_date,
-    updated.gender,
-    updated.plan,
-    updated.answers,
-    updated.current_index,
-    updated.updated_date,
-    id
-  ).run();
-
+  `).bind(updated.full_name, updated.email, updated.phone, updated.company, updated.role, updated.birth_date, updated.gender, updated.plan, updated.answers, updated.current_index, updated.updated_date, id).run();
   if (Object.prototype.hasOwnProperty.call(data, "company")) {
-    await env.DB.prepare(`
-      UPDATE results
-      SET participant_company = ?, updated_date = ?
-      WHERE participant_id = ? OR lower(participant_email) = lower(?)
-    `).bind(updated.company, updated.updated_date, id, updated.email || current.email || "").run();
+    await env.DB.prepare("UPDATE results SET participant_company = ?, updated_date = ? WHERE participant_id = ? OR lower(participant_email) = lower(?)")
+      .bind(updated.company, updated.updated_date, id, updated.email || current.email || "").run();
   }
-
   return json(updated);
+}
+
+async function deleteParticipant(id, env) {
+  const current = await env.DB.prepare("SELECT * FROM participants WHERE id = ?").bind(id).first();
+  if (!current) return json({ error: "Participante nao encontrado." }, 404);
+  await env.DB.prepare("DELETE FROM results WHERE participant_id = ? OR lower(participant_email) = lower(?)").bind(id, current.email || "").run();
+  await env.DB.prepare("DELETE FROM participants WHERE id = ?").bind(id).run();
+  return json({ ok: true, deleted: "participant", id });
 }
 
 async function listParticipants(url, env) {
@@ -370,52 +289,17 @@ async function createResult(request, env) {
   const data = await readJson(request);
   const now = new Date().toISOString();
   const result = {
-    id: makeId("result"),
-    participant_id: data.participant_id || "",
-    participant_name: data.participant_name || "",
-    participant_email: data.participant_email || "",
-    participant_company: data.participant_company || "",
-    participant_role: data.participant_role || "",
-    participant_birth_date: data.participant_birth_date || "",
-    plan: data.plan || "basico",
-    answers: data.answers || "{}",
-    scores: data.scores || "{}",
-    dominant_type: data.dominant_type || null,
-    dominant_type_name: data.dominant_type_name || "",
-    wing: data.wing == null ? "" : String(data.wing),
-    wing_name: data.wing_name || "",
-    confidence_level: data.confidence_level || 0,
-    duration_seconds: data.duration_seconds || 0,
-    completed: data.completed ? 1 : 0,
-    created_date: now,
-    updated_date: now
+    id: makeId("result"), participant_id: data.participant_id || "", participant_name: data.participant_name || "",
+    participant_email: data.participant_email || "", participant_company: data.participant_company || "", participant_role: data.participant_role || "",
+    participant_birth_date: data.participant_birth_date || "", plan: data.plan || "basico", answers: data.answers || "{}",
+    scores: data.scores || "{}", dominant_type: data.dominant_type || null, dominant_type_name: data.dominant_type_name || "",
+    wing: data.wing == null ? "" : String(data.wing), wing_name: data.wing_name || "", confidence_level: data.confidence_level || 0,
+    duration_seconds: data.duration_seconds || 0, completed: data.completed ? 1 : 0, created_date: now, updated_date: now
   };
-
   await env.DB.prepare(`
     INSERT INTO results (id, participant_id, participant_name, participant_email, participant_company, participant_role, participant_birth_date, plan, answers, scores, dominant_type, dominant_type_name, wing, wing_name, confidence_level, duration_seconds, completed, created_date, updated_date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    result.id,
-    result.participant_id,
-    result.participant_name,
-    result.participant_email,
-    result.participant_company,
-    result.participant_role,
-    result.participant_birth_date,
-    result.plan,
-    result.answers,
-    result.scores,
-    result.dominant_type,
-    result.dominant_type_name,
-    result.wing,
-    result.wing_name,
-    result.confidence_level,
-    result.duration_seconds,
-    result.completed,
-    result.created_date,
-    result.updated_date
-  ).run();
-
+  `).bind(result.id, result.participant_id, result.participant_name, result.participant_email, result.participant_company, result.participant_role, result.participant_birth_date, result.plan, result.answers, result.scores, result.dominant_type, result.dominant_type_name, result.wing, result.wing_name, result.confidence_level, result.duration_seconds, result.completed, result.created_date, result.updated_date).run();
   return json({ ...result, completed: Boolean(result.completed) }, 201);
 }
 
@@ -429,7 +313,6 @@ async function updateResult(id, request, env) {
   const data = await readJson(request);
   const current = await env.DB.prepare("SELECT * FROM results WHERE id = ?").bind(id).first();
   if (!current) return json({ error: "Resultado nao encontrado." }, 404);
-
   const updated = {
     ...current,
     participant_name: data.participant_name ?? current.participant_name,
@@ -440,29 +323,25 @@ async function updateResult(id, request, env) {
     plan: data.plan ?? current.plan,
     updated_date: new Date().toISOString()
   };
-
   await env.DB.prepare(`
     UPDATE results
     SET participant_name = ?, participant_email = ?, participant_company = ?, participant_role = ?, participant_birth_date = ?, plan = ?, updated_date = ?
     WHERE id = ?
-  `).bind(
-    updated.participant_name,
-    updated.participant_email,
-    updated.participant_company,
-    updated.participant_role,
-    updated.participant_birth_date,
-    updated.plan,
-    updated.updated_date,
-    id
-  ).run();
-
+  `).bind(updated.participant_name, updated.participant_email, updated.participant_company, updated.participant_role, updated.participant_birth_date, updated.plan, updated.updated_date, id).run();
   if (Object.prototype.hasOwnProperty.call(data, "participant_company") && updated.participant_id) {
-    await env.DB.prepare("UPDATE participants SET company = ?, updated_date = ? WHERE id = ?")
-      .bind(updated.participant_company, updated.updated_date, updated.participant_id)
-      .run();
+    await env.DB.prepare("UPDATE participants SET company = ?, updated_date = ? WHERE id = ?").bind(updated.participant_company, updated.updated_date, updated.participant_id).run();
   }
-
   return json({ ...updated, completed: Boolean(updated.completed) });
+}
+
+async function deleteResult(id, env) {
+  const current = await env.DB.prepare("SELECT * FROM results WHERE id = ?").bind(id).first();
+  if (!current) return json({ error: "Resultado nao encontrado." }, 404);
+  await env.DB.prepare("DELETE FROM results WHERE id = ?").bind(id).run();
+  if (current.participant_id) {
+    await env.DB.prepare("DELETE FROM participants WHERE id = ?").bind(current.participant_id).run();
+  }
+  return json({ ok: true, deleted: "result", id, participant_id: current.participant_id || null });
 }
 
 async function listResults(url, env) {
@@ -471,7 +350,6 @@ async function listResults(url, env) {
   const statement = participantId
     ? env.DB.prepare("SELECT * FROM results WHERE participant_id = ? ORDER BY created_date DESC LIMIT ?").bind(participantId, limit)
     : env.DB.prepare("SELECT * FROM results ORDER BY created_date DESC LIMIT ?").bind(limit);
-
   const { results } = await statement.all();
   return json((results || []).map((result) => ({ ...result, completed: Boolean(result.completed) })));
 }
@@ -479,9 +357,7 @@ async function listResults(url, env) {
 async function handleApi(request, env) {
   const dbError = requireDb(env);
   if (dbError) return dbError;
-
   await ensureSchema(env);
-
   const url = new URL(request.url);
   const { pathname } = url;
   const method = request.method.toUpperCase();
@@ -499,6 +375,7 @@ async function handleApi(request, env) {
   const participantMatch = pathname.match(/^\/api\/participants\/([^/]+)$/);
   if (participantMatch && method === "GET") return getParticipant(participantMatch[1], env);
   if (participantMatch && method === "PATCH") return updateParticipant(participantMatch[1], request, env);
+  if (participantMatch && method === "DELETE") return deleteParticipant(participantMatch[1], env);
 
   if (pathname === "/api/results" && method === "POST") return createResult(request, env);
   if (pathname === "/api/results" && method === "GET") return listResults(url, env);
@@ -506,6 +383,7 @@ async function handleApi(request, env) {
   const resultMatch = pathname.match(/^\/api\/results\/([^/]+)$/);
   if (resultMatch && method === "GET") return getResult(resultMatch[1], env);
   if (resultMatch && method === "PATCH") return updateResult(resultMatch[1], request, env);
+  if (resultMatch && method === "DELETE") return deleteResult(resultMatch[1], env);
 
   return json({ error: "Rota nao encontrada." }, 404);
 }

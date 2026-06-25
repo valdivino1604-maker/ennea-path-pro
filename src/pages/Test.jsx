@@ -20,7 +20,6 @@ export default function Test() {
   const timerRef = useRef();
   const saveTimeoutRef = useRef();
 
-  // Carregar progresso salvo
   useEffect(() => {
     (async () => {
       try {
@@ -44,7 +43,6 @@ export default function Test() {
     })();
   }, [participantId]);
 
-  // Timer
   useEffect(() => {
     timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
     return () => {
@@ -53,7 +51,6 @@ export default function Test() {
     };
   }, [startTime]);
 
-  // Auto-save com debounce
   const saveProgress = (newAnswers, newIndex) => {
     clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
@@ -61,7 +58,8 @@ export default function Test() {
       try {
         await updateParticipant(participantId, {
           answers: JSON.stringify(newAnswers),
-          current_index: newIndex
+          current_index: newIndex,
+          plan: "premium"
         });
       } catch (e) {
         console.error(e);
@@ -87,7 +85,7 @@ export default function Test() {
     setAnswers(newAnswers);
     saveProgress(newAnswers, currentIndex);
     if (currentIndex < totalQuestions - 1) {
-      setTimeout(() => setCurrentIndex(prev => prev + 1), 300);
+      setTimeout(() => setCurrentIndex((prev) => prev + 1), 300);
     }
   };
 
@@ -110,7 +108,7 @@ export default function Test() {
         participant_company: p.company || "",
         participant_role: p.role || "",
         participant_birth_date: p.birth_date || "",
-        plan: p.plan || "basico",
+        plan: "premium",
         answers: JSON.stringify(answers),
         scores: JSON.stringify(results),
         dominant_type: results.dominantType,
@@ -122,10 +120,10 @@ export default function Test() {
         completed: true
       });
 
-      // Limpar progresso salvo
       await updateParticipant(participantId, {
         answers: "{}",
-        current_index: 0
+        current_index: 0,
+        plan: "premium"
       });
 
       navigate(`/results/${savedResult.id}`);
@@ -146,15 +144,12 @@ export default function Test() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="font-display text-sm font-semibold text-foreground">Diagnóstico de Liderança</span>
             <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-              {saving && (
-                <span className="text-emerald-400 flex items-center gap-1"><Save className="w-3 h-3" /> Salvando...</span>
-              )}
+              {saving && <span className="text-emerald-400 flex items-center gap-1"><Save className="w-3 h-3" /> Salvando...</span>}
               <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatTime(elapsed)}</span>
               <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {answeredCount}/{totalQuestions}</span>
             </div>
@@ -166,47 +161,26 @@ export default function Test() {
         </div>
       </div>
 
-      {/* Question */}
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-2xl">
           <AnimatePresence mode="wait">
-            <motion.div
-              key={currentIndex}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.2 }}
-            >
+            <motion.div key={currentIndex} initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.2 }}>
               <div className="text-center mb-2">
-                <span className="text-[10px] font-medium text-primary bg-primary/10 px-3 py-1 rounded-full">
-                  Pergunta {currentIndex + 1} de {totalQuestions}
-                </span>
+                <span className="text-[10px] font-medium text-primary bg-primary/10 px-3 py-1 rounded-full">Pergunta {currentIndex + 1} de {totalQuestions}</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-heading font-semibold text-foreground text-center mt-6 mb-10 leading-relaxed px-2">
                 {currentQuestion.text}
               </h2>
 
               <div className="space-y-2.5">
-                {LIKERT_OPTIONS.map(opt => {
+                {LIKERT_OPTIONS.map((opt) => {
                   const isSelected = answers[currentQuestion.id] === opt.value;
                   return (
-                    <button
-                      key={opt.value}
-                      onClick={() => handleAnswer(opt.value)}
-                      className={`w-full p-4 rounded-xl border text-left transition-all duration-200 flex items-center gap-4 ${
-                        isSelected
-                          ? "border-primary bg-primary/5 shadow-[0_0_20px_rgba(120,80,255,0.15)]"
-                          : "border-border hover:border-white/10 bg-card"
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 transition-colors ${
-                        isSelected ? "bg-primary text-white" : "bg-white/[0.05] text-muted-foreground"
-                      }`}>
+                    <button key={opt.value} onClick={() => handleAnswer(opt.value)} className={`w-full p-4 rounded-xl border text-left transition-all duration-200 flex items-center gap-4 ${isSelected ? "border-primary bg-primary/5 shadow-[0_0_20px_rgba(120,80,255,0.15)]" : "border-border hover:border-white/10 bg-card"}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 transition-colors ${isSelected ? "bg-primary text-white" : "bg-white/[0.05] text-muted-foreground"}`}>
                         {opt.value}
                       </div>
-                      <span className={`text-sm font-medium ${isSelected ? "text-foreground" : "text-muted-foreground"}`}>
-                        {opt.label}
-                      </span>
+                      <span className={`text-sm font-medium ${isSelected ? "text-foreground" : "text-muted-foreground"}`}>{opt.label}</span>
                     </button>
                   );
                 })}
@@ -216,35 +190,18 @@ export default function Test() {
         </div>
       </div>
 
-      {/* Navigation */}
       <div className="sticky bottom-0 bg-background/80 backdrop-blur-xl border-t border-border">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Button
-            variant="ghost"
-            onClick={() => handleNavigate(Math.max(0, currentIndex - 1))}
-            disabled={currentIndex === 0}
-            className="gap-1 text-muted-foreground"
-            size="sm"
-          >
+          <Button variant="ghost" onClick={() => handleNavigate(Math.max(0, currentIndex - 1))} disabled={currentIndex === 0} className="gap-1 text-muted-foreground" size="sm">
             <ChevronLeft className="w-4 h-4" /> Anterior
           </Button>
 
           {answeredCount === totalQuestions ? (
-            <Button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="gap-2 px-6 rounded-xl font-semibold shadow-lg shadow-primary/30"
-            >
-              {submitting ? "Calculando..." : "Ver Resultado"}
+            <Button onClick={handleSubmit} disabled={submitting} className="gap-2 px-6 rounded-xl font-semibold shadow-lg shadow-primary/30">
+              {submitting ? "Calculando..." : "Ver Resultado Completo"}
             </Button>
           ) : (
-            <Button
-              variant="ghost"
-              onClick={() => handleNavigate(Math.min(totalQuestions - 1, currentIndex + 1))}
-              disabled={currentIndex === totalQuestions - 1}
-              className="gap-1 text-muted-foreground"
-              size="sm"
-            >
+            <Button variant="ghost" onClick={() => handleNavigate(Math.min(totalQuestions - 1, currentIndex + 1))} disabled={currentIndex === totalQuestions - 1} className="gap-1 text-muted-foreground" size="sm">
               Próxima <ChevronRight className="w-4 h-4" />
             </Button>
           )}

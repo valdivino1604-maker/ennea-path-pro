@@ -36,6 +36,12 @@ jobs:
           echo "Worker: ennea-path-pro1515"
           echo "Assets: ./dist"
           echo "Config: wrangler.toml"
+          echo "D1 database: ennea-path-pro-db"
+
+      - name: Import Base44 test results to D1
+        run: npx --yes wrangler@4.105.0 d1 execute ennea-path-pro-db --remote --file=./migrations/import_base44_test_results.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Deploy to Cloudflare Workers
         run: npx --yes wrangler@4.105.0 deploy

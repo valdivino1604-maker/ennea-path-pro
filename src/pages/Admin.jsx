@@ -59,6 +59,14 @@ function answerCount(value) {
   return Object.keys(parseAnswers(value)).length;
 }
 
+function buildCompletedAnswers(answers) {
+  const completed = { ...answers };
+  QUESTIONS.forEach((question) => {
+    if (completed[question.id] == null) completed[question.id] = 3;
+  });
+  return completed;
+}
+
 function companyLabel(value) {
   const label = String(value || "").trim();
   return label || "Sem empresa";
@@ -86,7 +94,7 @@ function confidenceLevel(value) {
 }
 
 function canGenerateResult(participant) {
-  return answerCount(participant.answers) >= QUESTIONS.length;
+  return answerCount(participant.answers) >= QUESTIONS.length - 1;
 }
 
 export default function Admin() {
@@ -249,15 +257,20 @@ export default function Admin() {
   async function generateResultForParticipant(participant) {
     const answers = parseAnswers(participant.answers);
     const answered = Object.keys(answers).length;
-    if (answered < QUESTIONS.length) {
-      window.alert(`Este candidato tem ${answered}/${QUESTIONS.length} respostas. So gere manualmente quando todas estiverem respondidas.`);
+    if (answered < QUESTIONS.length - 1) {
+      window.alert(`Este candidato tem ${answered}/${QUESTIONS.length} respostas. Para gerar manualmente, precisa ter pelo menos ${QUESTIONS.length - 1}/${QUESTIONS.length}.`);
       return;
     }
-    if (!window.confirm(`Gerar resultado manual para ${participant.full_name || "este candidato"}?`)) return;
+
+    const message = answered === QUESTIONS.length
+      ? `Gerar resultado manual para ${participant.full_name || "este candidato"}?`
+      : `Gerar resultado manual para ${participant.full_name || "este candidato"}? Falta 1 resposta; ela sera preenchida como neutra.`;
+    if (!window.confirm(message)) return;
 
     setGeneratingId(participant.id);
     try {
-      const calculated = calculateResults(answers);
+      const finalAnswers = buildCompletedAnswers(answers);
+      const calculated = calculateResults(finalAnswers);
       const savedResult = await base44.entities.TestResult.create({
         participant_id: participant.id,
         participant_name: participant.full_name || "",
@@ -265,8 +278,8 @@ export default function Admin() {
         participant_company: participant.company || "",
         participant_role: participant.role || "",
         participant_birth_date: participant.birth_date || "",
-        plan: participant.plan || "basico",
-        answers: JSON.stringify(answers),
+        plan: "premium",
+        answers: JSON.stringify(finalAnswers),
         scores: JSON.stringify(calculated),
         dominant_type: calculated.dominantType,
         dominant_type_name: calculated.dominantTypeName,
@@ -277,10 +290,10 @@ export default function Admin() {
         completed: true
       });
 
-      await base44.entities.TestParticipant.update(participant.id, { answers: "{}", current_index: 0 });
+      await base44.entities.TestParticipant.update(participant.id, { answers: "{}", current_index: 0, plan: "premium" });
       setResults((rows) => [savedResult, ...rows]);
-      setParticipants((rows) => rows.map((item) => item.id === participant.id ? { ...item, answers: "{}", current_index: 0 } : item));
-      window.alert("Resultado gerado com sucesso.");
+      setParticipants((rows) => rows.map((item) => item.id === participant.id ? { ...item, answers: "{}", current_index: 0, plan: "premium" } : item));
+      window.alert(answered === QUESTIONS.length ? "Resultado gerado com sucesso." : "Resultado gerado com sucesso. A pergunta faltante foi preenchida como neutra.");
     } catch (error) {
       window.alert(error.message || "Nao foi possivel gerar o resultado.");
     } finally {
@@ -389,7 +402,7 @@ export default function Admin() {
 
           <section className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-border flex items-center justify-between gap-3">
-              <div><h2 className="font-heading text-sm font-semibold text-foreground">Candidatos cadastrados sem resultado</h2><p className="text-xs text-muted-foreground">Use Gerar resultado quando o teste travar no fim, mas todas as respostas estiverem salvas.</p></div>
+              <div><h2 className="font-heading text-sm font-semibold text-foreground">Candidatos cadastrados sem resultado</h2><p className="text-xs text-muted-foreground">Use Gerar resultado quando o teste travar no fim. Com 89/90, a pergunta faltante entra como neutra.</p></div>
               <span className="text-xs text-muted-foreground">{filteredPending.length} encontrado(s)</span>
             </div>
             <div className="overflow-x-auto">

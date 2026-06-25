@@ -1,6 +1,5 @@
 import React from "react";
-import { Zap, AlertTriangle, Lightbulb, Target, Briefcase, Sparkles, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Zap, AlertTriangle, Lightbulb, Target, Briefcase } from "lucide-react";
 import ProfessionalAptitude from "@/components/results/ProfessionalAptitude";
 
 const colorTokens = {
@@ -13,34 +12,31 @@ const colorTokens = {
 
 export default function BasicView({ result, dominantDetail, ranking, scores }) {
   const dominantType = result.dominant_type;
-  const strengthsList = dominantDetail?.strengths?.split(/[,.]/).filter(Boolean).map(s => s.trim()).filter(s => s.length > 2) || [];
-  const challengesList = dominantDetail?.weaknesses?.split(/[,.]/).filter(Boolean).map(s => s.trim()).filter(s => s.length > 2) || [];
+  const strengthsList = dominantDetail?.strengths?.split(/[,.]/).filter(Boolean).map((s) => s.trim()).filter((s) => s.length > 2) || [];
+  const challengesList = dominantDetail?.weaknesses?.split(/[,.]/).filter(Boolean).map((s) => s.trim()).filter((s) => s.length > 2) || [];
   const recommendations = dominantDetail?.recommendations || [];
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
       <div className="bg-card border border-border rounded-2xl p-5">
         <h3 className="font-heading text-sm font-semibold text-foreground mb-3">Resumo da Personalidade</h3>
         <p className="text-sm text-muted-foreground leading-relaxed">{dominantDetail?.description}</p>
       </div>
 
-      {/* Strengths & Weaknesses */}
       <div className="grid sm:grid-cols-2 gap-4">
         <CardSection title="5 Pontos Fortes" icon={Zap} items={strengthsList.slice(0, 5)} color="emerald" />
         <CardSection title="5 Pontos de Atenção" icon={AlertTriangle} items={challengesList.slice(0, 5)} color="rose" />
       </div>
 
-      {/* Basic Indicators */}
       <div className="bg-card border border-border rounded-2xl p-5">
-        <h3 className="font-heading text-sm font-semibold text-foreground mb-4">Indicadores Básicos</h3>
+        <h3 className="font-heading text-sm font-semibold text-foreground mb-4">Indicadores Comportamentais</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: "Liderança", icon: Target, text: dominantDetail?.leadership || "—", color: "emerald" },
             { label: "Empreendedorismo", icon: Briefcase, text: dominantDetail?.strengths?.split(",")[0]?.trim() || "—", color: "blue" },
             { label: "Inteligência Emocional", icon: Lightbulb, text: dominantDetail?.communication || "—", color: "purple" },
             { label: "Comunicação e Influência", icon: Zap, text: dominantDetail?.communication || "—", color: "amber" },
-          ].map(ind => {
+          ].map((ind) => {
             const tc = colorTokens[ind.color];
             return (
               <div key={ind.label} className={`p-3 rounded-xl ${tc.bg} ${tc.border} border`}>
@@ -55,34 +51,18 @@ export default function BasicView({ result, dominantDetail, ranking, scores }) {
         </div>
       </div>
 
-      {/* Professional Aptitude (Basic) */}
-      <ProfessionalAptitude dominantType={dominantType} dominantDetail={dominantDetail} ranking={ranking} isPremium={false} />
+      <ProfessionalAptitude dominantType={dominantType} dominantDetail={dominantDetail} ranking={ranking} isPremium={true} />
 
-      {/* Mini PDI */}
       <div className="bg-card border border-border rounded-2xl p-5">
-        <h3 className="font-heading text-sm font-semibold text-foreground mb-4">Mini Plano de Desenvolvimento</h3>
+        <h3 className="font-heading text-sm font-semibold text-foreground mb-4">Plano de Desenvolvimento</h3>
         <div className="grid sm:grid-cols-3 gap-3">
-          {(recommendations.slice(0, 3)).map((rec, i) => (
+          {recommendations.slice(0, 3).map((rec, i) => (
             <div key={i} className="p-3 rounded-xl bg-white/[0.03] border border-border/50">
               <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary mb-2">{i + 1}</span>
               <p className="text-xs text-muted-foreground leading-relaxed">{rec}</p>
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Upsell Card */}
-      <div className="bg-gradient-to-br from-primary/10 via-purple-500/10 to-amber-500/10 border border-primary/20 rounded-2xl p-6 text-center">
-        <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center mx-auto mb-4">
-          <Sparkles className="w-6 h-6 text-primary" />
-        </div>
-        <h3 className="font-heading text-lg font-bold text-foreground">Desbloqueie o Plano Premium</h3>
-        <p className="text-sm text-muted-foreground mt-2 max-w-lg mx-auto">
-          Acesse análise executiva completa, ranking de carreira, score executivo, compatibilidade entre perfis e plano de desenvolvimento de 90 dias.
-        </p>
-        <Button size="lg" className="mt-5 gap-2 rounded-xl bg-primary hover:bg-primary/90">
-          Fazer Upgrade <ArrowRight className="w-4 h-4" />
-        </Button>
       </div>
     </div>
   );

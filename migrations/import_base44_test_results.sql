@@ -43,8 +43,6 @@ CREATE TABLE IF NOT EXISTS results (
 CREATE INDEX IF NOT EXISTS idx_results_participant_id ON results(participant_id);
 CREATE INDEX IF NOT EXISTS idx_results_created_date ON results(created_date);
 
-BEGIN TRANSACTION;
-
 INSERT OR REPLACE INTO participants (id, full_name, email, phone, company, role, birth_date, gender, plan, answers, current_index, created_date, updated_date)
 VALUES ('6a327f55d25ae51a4c837244', 'Diogo Luna Rodrigues', 'diogoluna04@gmail.com', NULL, 'MetalVida', 'CEO', '2004-06-10', NULL, 'premium', '{"1":5,"2":5,"3":4,"4":4,"5":4,"6":4,"7":4,"8":4,"9":4,"10":4,"11":3,"12":3,"13":3,"14":4,"15":2,"16":4,"17":2,"18":4,"19":3,"20":2,"21":4,"22":4,"23":4,"24":4,"25":4,"26":3,"27":4,"28":3,"29":4,"30":4,"31":4,"32":4,"33":5,"34":3,"35":3,"36":3,"37":4,"38":4,"39":4,"40":5,"41":3,"42":4,"43":3,"44":5,"45":4,"46":4,"47":4,"48":4,"49":4,"50":5,"51":5,"52":5,"53":5,"54":5,"55":5,"56":2,"57":2,"58":4,"59":3,"60":5,"61":5,"62":3,"63":4,"64":4,"65":3,"66":3,"67":3,"68":4,"69":3,"70":4,"71":4,"72":5,"73":5,"74":3,"75":3,"76":5,"77":3,"78":3,"79":4,"80":4,"81":3,"82":3,"83":3,"84":3,"85":3,"86":4,"87":3,"88":1,"89":1,"90":3}', 90, '2026-06-17T11:16:22.929000', '2026-06-17T11:16:22.929000');
 
@@ -81,7 +79,6 @@ VALUES ('6a320852d08a0a9f6f24402e', '6a3205f2bc33fa7ad9cad7a0', 'Marliana Araúj
 INSERT OR REPLACE INTO results (id, participant_id, participant_name, participant_email, participant_company, participant_role, participant_birth_date, plan, answers, scores, dominant_type, dominant_type_name, wing, wing_name, confidence_level, duration_seconds, completed, created_date, updated_date)
 VALUES ('6a31f50ac561f8617a07cc6e', '6a31f26b5eebafd351674fce', 'Valdivino Rodrigues Arantes junior Arantes junior', 'valdivino1604@gmail.com', 'Metal vida', 'CEO', '1989-04-16', 'premium', '{"1":4,"2":5,"3":3,"4":3,"5":5,"6":2,"7":4,"8":5,"9":3,"10":4,"11":5,"12":5,"13":5,"14":5,"15":4,"16":4,"17":4,"18":4,"19":3,"20":5,"21":3,"22":3,"23":5,"24":5,"25":5,"26":4,"27":5,"28":3,"29":3,"30":4,"31":5,"32":3,"33":4,"34":3,"35":3,"36":2,"37":5,"38":4,"39":5,"40":5,"41":2,"42":2,"43":4,"44":4,"45":3,"46":2,"47":2,"48":5,"49":2,"50":5,"51":2,"52":5,"53":5,"54":2,"55":5,"56":2,"57":4,"58":4,"59":4,"60":1,"61":5,"62":5,"63":5,"64":3,"65":5,"66":4,"67":5,"68":4,"69":4,"70":5,"71":3,"72":4,"73":4,"74":4,"75":4,"76":5,"77":4,"78":4,"79":4,"80":4,"81":4,"82":5,"83":3,"84":3,"85":3,"86":4,"87":4,"88":4,"89":3,"90":4}', '{"scores":{"1":38,"2":44,"3":40,"4":39,"5":31,"6":34,"7":45,"8":40,"9":37},"percentages":{"1":76,"2":88,"3":80,"4":78,"5":62,"6":68,"7":90,"8":80,"9":74},"ranking":[{"type":7,"percentage":90,"score":45},{"type":2,"percentage":88,"score":44},{"type":3,"percentage":80,"score":40},{"type":8,"percentage":80,"score":40},{"type":4,"percentage":78,"score":39},{"type":1,"percentage":76,"score":38},{"type":9,"percentage":74,"score":37},{"type":6,"percentage":68,"score":34},{"type":5,"percentage":62,"score":31}],"dominantType":7,"dominantTypeName":"O Entusiasta","wing":8,"wingName":"O Desafiador","confidence":52}', 7, 'O Entusiasta', '8', 'O Desafiador', 52, 670, 1, '2026-06-17T01:14:50.973000', '2026-06-17T03:35:55.444000');
 
-COMMIT;
 
 SELECT 'participants_imported' AS metric, COUNT(*) AS total FROM participants;
 SELECT 'results_imported' AS metric, COUNT(*) AS total FROM results;

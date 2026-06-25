@@ -38,6 +38,4 @@ jobs:
           echo "Config: wrangler.toml"
 
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          command: deploy
+        run: npx --yes wrangler@3.90.0 deploy

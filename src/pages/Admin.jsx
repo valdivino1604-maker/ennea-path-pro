@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BarChart3,
-  Calendar,
+  Building2,
   CheckCircle2,
   ClipboardList,
   Clock,
@@ -11,7 +11,6 @@ import {
   Heart,
   History,
   LayoutDashboard,
-  Lightbulb,
   LogOut,
   Menu,
   Search,
@@ -35,16 +34,33 @@ const NAV_ITEMS = [
   { icon: Users, label: "Mapeamento de Equipes", href: "/admin/team-mapping" },
   { icon: Heart, label: "Compatibilidade", href: "/admin/compatibility" },
   { icon: Target, label: "Plano de Desenvolvimento", href: "/admin/development-plan" },
-  { icon: History, label: "Histórico Comportamental", href: "/admin/behavioral-history" },
-  { icon: Bot, label: "IA para Liderança", href: "/admin/ai-leadership" },
-  { icon: BarChart3, label: "Relatórios", href: "/admin/reports" },
-  { icon: Settings, label: "Configurações", href: "/admin" }
+  { icon: History, label: "Historico Comportamental", href: "/admin/behavioral-history" },
+  { icon: Bot, label: "IA para Lideranca", href: "/admin/ai-leadership" },
+  { icon: BarChart3, label: "Relatorios", href: "/admin/reports" },
+  { icon: Settings, label: "Configuracoes", href: "/admin" }
 ];
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function companyLabel(value) {
+  const label = String(value || "").trim();
+  return label || "Sem empresa";
+}
+
+function companyKey(value) {
+  return normalizeText(companyLabel(value));
+}
 
 function matchesSearch(item, search, fields) {
   if (!search) return true;
-  const needle = search.toLowerCase();
-  return fields.some((field) => String(item?.[field] || "").toLowerCase().includes(needle));
+  const needle = normalizeText(search);
+  return fields.some((field) => normalizeText(item?.[field]).includes(needle));
 }
 
 function formatDate(value) {
@@ -63,6 +79,24 @@ function hasMeaningfulAnswers(participant) {
   }
 }
 
+function averageConfidence(rows) {
+  return Math.round(
+    rows.reduce((total, result) => total + (Number(result.confidence_level) || 0), 0) / Math.max(rows.length, 1)
+  );
+}
+
+function mostCommonType(rows) {
+  const counts = {};
+  rows.forEach((result) => {
+    const type = Number(result.dominant_type);
+    if (!type) return;
+    counts[type] = (counts[type] || 0) + 1;
+  });
+
+  const [type, count] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || [];
+  return type ? { type: Number(type), count, name: TYPE_NAMES[Number(type)] } : null;
+}
+
 export default function Admin() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -72,6 +106,7 @@ export default function Admin() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("all");
+  const [filterCompany, setFilterCompany] = useState("all");
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -106,32 +141,92 @@ export default function Admin() {
     });
   }, [participants, completedParticipantKeys]);
 
+  const companyOptions = useMemo(() => {
+    const map = new Map();
+    [...participants, ...results].forEach((item) => {
+      const raw = item.company || item.participant_company;
+      const label = companyLabel(raw);
+      const key = companyKey(raw);
+      if (!map.has(key)) map.set(key, label);
+    });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  }, [participants, results]);
+
   const filteredResults = useMemo(() => {
     return results.filter((result) => {
       if (!matchesSearch(result, search, ["participant_name", "participant_email", "participant_company", "participant_role"])) return false;
-      if (filterType !== "all" && result.dominant_type !== parseInt(filterType, 10)) return false;
+      if (filterType !== "all" && Number(result.dominant_type) !== parseInt(filterType, 10)) return false;
+      if (filterCompany !== "all" && companyKey(result.participant_company) !== filterCompany) return false;
       return true;
     });
-  }, [results, search, filterType]);
+  }, [results, search, filterType, filterCompany]);
 
   const filteredPending = useMemo(() => {
-    return pendingParticipants.filter((participant) =>
-      matchesSearch(participant, search, ["full_name", "email", "company", "role", "phone"])
-    );
-  }, [pendingParticipants, search]);
+    return pendingParticipants.filter((participant) => {
+      if (!matchesSearch(participant, search, ["full_name", "email", "company", "role", "phone"])) return false;
+      if (filterCompany !== "all" && companyKey(participant.company) !== filterCompany) return false;
+      return true;
+    });
+  }, [pendingParticipants, search, filterCompany]);
 
   const typeCounts = useMemo(() => {
     const counts = {};
-    for (let i = 1; i <= 9; i++) counts[i] = { name: TYPE_NAMES[i], count: 0, color: TYPE_COLORS[i] };
+    for (let i = 1; i <= 9; i++) counts[i] = { name: TYPE_NAMES[i], count: 0, color: TYPE_COLORS[i], type: i };
     filteredResults.forEach((result) => {
       if (result.dominant_type && counts[result.dominant_type]) counts[result.dominant_type].count += 1;
     });
     return Object.values(counts).filter((item) => item.count > 0).sort((a, b) => b.count - a.count);
   }, [filteredResults]);
 
-  const avgConfidence = Math.round(
-    results.reduce((total, result) => total + (Number(result.confidence_level) || 0), 0) / Math.max(results.length, 1)
-  );
+  const companyRows = useMemo(() => {
+    const map = new Map();
+
+    const ensure = (rawCompany) => {
+      const key = companyKey(rawCompany);
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          company: companyLabel(rawCompany),
+          completed: 0,
+          pending: 0,
+          confidenceTotal: 0,
+          typeCounts: {}
+        });
+      }
+      return map.get(key);
+    };
+
+    results.forEach((result) => {
+      const row = ensure(result.participant_company);
+      row.completed += 1;
+      row.confidenceTotal += Number(result.confidence_level) || 0;
+      const type = Number(result.dominant_type);
+      if (type) row.typeCounts[type] = (row.typeCounts[type] || 0) + 1;
+    });
+
+    pendingParticipants.forEach((participant) => {
+      const row = ensure(participant.company);
+      row.pending += 1;
+    });
+
+    return Array.from(map.values())
+      .map((row) => {
+        const [topType, topCount] = Object.entries(row.typeCounts).sort((a, b) => b[1] - a[1])[0] || [];
+        return {
+          ...row,
+          total: row.completed + row.pending,
+          avgConfidence: row.completed ? Math.round(row.confidenceTotal / row.completed) : 0,
+          topType: topType ? Number(topType) : null,
+          topTypeCount: topCount || 0
+        };
+      })
+      .filter((row) => filterCompany === "all" || row.key === filterCompany)
+      .sort((a, b) => b.completed - a.completed || b.total - a.total || a.company.localeCompare(b.company, "pt-BR"));
+  }, [results, pendingParticipants, filterCompany]);
+
+  const avgConfidence = averageConfidence(filteredResults);
+  const dominantType = mostCommonType(filteredResults);
+  const startedPending = filteredPending.filter(hasMeaningfulAnswers).length;
 
   if (loading) {
     return (
@@ -147,7 +242,7 @@ export default function Admin() {
         <div className="p-5">
           <Link to="/" className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">EP</div>
-            <span className="font-display text-base font-semibold text-foreground">Diagnóstico de Liderança</span>
+            <span className="font-display text-base font-semibold text-foreground">Diagnostico de Lideranca</span>
           </Link>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
@@ -183,8 +278,8 @@ export default function Admin() {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="font-display text-lg font-bold text-foreground">Dashboard</h1>
-            <p className="text-xs text-muted-foreground">Resultados concluídos e candidatos cadastrados no banco</p>
+            <h1 className="font-display text-lg font-bold text-foreground">Dashboard de Analise</h1>
+            <p className="text-xs text-muted-foreground">Filtros por empresa, tipo, cargo e status dos testes</p>
           </div>
           <Button
             variant="ghost"
@@ -206,43 +301,69 @@ export default function Admin() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard icon={Users} label="Candidatos cadastrados" value={participants.length} />
-            <MetricCard icon={ClipboardList} label="Testes concluídos" value={results.length} />
-            <MetricCard icon={Clock} label="Sem resultado" value={pendingParticipants.length} />
-            <MetricCard icon={TrendingUp} label="Confiança média" value={`${avgConfidence}%`} />
+          <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+            <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Search className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, e-mail, empresa, cargo ou telefone..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  className="h-10 bg-background"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <select
+                  value={filterCompany}
+                  onChange={(event) => setFilterCompany(event.target.value)}
+                  className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground"
+                >
+                  <option value="all">Todas as empresas</option>
+                  {companyOptions.map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterType}
+                  onChange={(event) => setFilterType(event.target.value)}
+                  className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground"
+                >
+                  <option value="all">Todos os tipos</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((type) => (
+                    <option key={type} value={type}>Tipo {type} - {TYPE_NAMES[type]}</option>
+                  ))}
+                </select>
+                <Button
+                  variant="outline"
+                  className="h-10 gap-2"
+                  onClick={() => {
+                    setSearch("");
+                    setFilterCompany("all");
+                    setFilterType("all");
+                  }}
+                >
+                  <Filter className="w-4 h-4" /> Limpar filtros
+                </Button>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Analise atual: {filteredResults.length} resultado(s) concluido(s) e {filteredPending.length} cadastro(s) sem resultado no filtro selecionado.
+            </p>
           </div>
 
-          <div className="bg-card border border-border rounded-2xl p-4 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome, e-mail, empresa, cargo ou telefone..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="h-10 bg-background"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <select
-                value={filterType}
-                onChange={(event) => setFilterType(event.target.value)}
-                className="h-10 rounded-lg bg-background border border-border px-3 text-sm text-foreground"
-              >
-                <option value="all">Todos os tipos</option>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((type) => (
-                  <option key={type} value={type}>Tipo {type} — {TYPE_NAMES[type]}</option>
-                ))}
-              </select>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <MetricCard icon={Users} label="Candidatos filtrados" value={filteredResults.length + filteredPending.length} />
+            <MetricCard icon={ClipboardList} label="Testes concluidos" value={filteredResults.length} />
+            <MetricCard icon={Clock} label="Sem resultado" value={filteredPending.length} />
+            <MetricCard icon={TrendingUp} label="Confianca media" value={`${avgConfidence}%`} />
+            <MetricCard icon={Target} label="Tipo mais recorrente" value={dominantType ? `T${dominantType.type}` : "—"} />
           </div>
 
           <div className="grid lg:grid-cols-2 gap-6">
             <div className="bg-card border border-border rounded-2xl p-5">
-              <h2 className="font-heading text-sm font-semibold text-foreground mb-4">Distribuição dos tipos concluídos</h2>
+              <h2 className="font-heading text-sm font-semibold text-foreground mb-4">Distribuicao dos tipos concluidos</h2>
               {typeCounts.length === 0 ? (
-                <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">Nenhum resultado concluído no filtro atual.</div>
+                <div className="h-[220px] flex items-center justify-center text-sm text-muted-foreground">Nenhum resultado concluido no filtro atual.</div>
               ) : (
                 <div className="relative h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -269,16 +390,17 @@ export default function Admin() {
             </div>
 
             <div className="bg-card border border-border rounded-2xl p-5">
-              <h2 className="font-heading text-sm font-semibold text-foreground mb-4">Resumo operacional</h2>
+              <h2 className="font-heading text-sm font-semibold text-foreground mb-4">Resumo da analise atual</h2>
               <div className="space-y-3 text-sm">
-                <SummaryLine label="Cadastrados no banco" value={participants.length} />
-                <SummaryLine label="Com resultado concluído" value={results.length} />
-                <SummaryLine label="Cadastrados sem resultado" value={pendingParticipants.length} />
-                <SummaryLine label="Com teste iniciado e não finalizado" value={pendingParticipants.filter(hasMeaningfulAnswers).length} />
+                <SummaryLine label="Empresas no banco" value={companyRows.length} />
+                <SummaryLine label="Com resultado concluido" value={filteredResults.length} />
+                <SummaryLine label="Cadastrados sem resultado" value={filteredPending.length} />
+                <SummaryLine label="Com teste iniciado e nao finalizado" value={startedPending} />
+                <SummaryLine label="Tipo predominante" value={dominantType ? `Tipo ${dominantType.type} - ${dominantType.name} (${dominantType.count})` : "—"} />
               </div>
-              {pendingParticipants.length > 0 && (
+              {filteredPending.length > 0 && (
                 <p className="mt-4 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                  Estes candidatos estavam no banco, mas não apareciam porque ainda não tinham resultado concluído salvo.
+                  Existem candidatos cadastrados sem resultado. Para uma analise confiavel da empresa, cobre a conclusao desses testes.
                 </p>
               )}
             </div>
@@ -287,7 +409,60 @@ export default function Admin() {
           <section className="bg-card border border-border rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-border flex items-center justify-between gap-3">
               <div>
-                <h2 className="font-heading text-sm font-semibold text-foreground">Resultados concluídos</h2>
+                <h2 className="font-heading text-sm font-semibold text-foreground">Analise por empresa</h2>
+                <p className="text-xs text-muted-foreground">Ranking operacional por empresa, conclusao e tipo predominante</p>
+              </div>
+              <span className="text-xs text-muted-foreground">{companyRows.length} empresa(s)</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Empresa</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Total</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Concluidos</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Pendentes</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Tipo predominante</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden lg:table-cell">Confianca media</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {companyRows.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center p-8 text-sm text-muted-foreground">Nenhuma empresa encontrada.</td></tr>
+                  ) : (
+                    companyRows.map((row) => (
+                      <tr key={row.key} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium text-foreground">{row.company}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-sm text-foreground">{row.total}</td>
+                        <td className="p-3 text-sm text-emerald-300">{row.completed}</td>
+                        <td className="p-3 text-sm text-amber-300">{row.pending}</td>
+                        <td className="p-3 hidden md:table-cell">
+                          {row.topType ? (
+                            <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[row.topType] || "#6366f1" }}>
+                              T{row.topType} - {TYPE_NAMES[row.topType]} ({row.topTypeCount})
+                            </span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-sm text-foreground hidden lg:table-cell">{row.avgConfidence ? `${row.avgConfidence}%` : "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="p-4 border-b border-border flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-heading text-sm font-semibold text-foreground">Resultados concluidos</h2>
                 <p className="text-xs text-muted-foreground">Candidatos que finalizaram o teste</p>
               </div>
               <span className="text-xs text-muted-foreground">{filteredResults.length} encontrado(s)</span>
@@ -297,16 +472,16 @@ export default function Admin() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Participante</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa/Cargo</th>
                     <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Tipo</th>
-                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Confiança</th>
+                    <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Confianca</th>
                     <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden lg:table-cell">Data</th>
-                    <th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Ação</th>
+                    <th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Acao</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredResults.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center p-10 text-sm text-muted-foreground">Nenhum resultado concluído encontrado.</td></tr>
+                    <tr><td colSpan={6} className="text-center p-10 text-sm text-muted-foreground">Nenhum resultado concluido encontrado.</td></tr>
                   ) : (
                     filteredResults.map((result) => (
                       <tr key={result.id} className="border-b border-border/50 hover:bg-white/[0.02] transition-colors">
@@ -314,10 +489,13 @@ export default function Admin() {
                           <p className="text-sm font-medium text-foreground">{result.participant_name || "Sem nome"}</p>
                           <p className="text-[11px] text-muted-foreground">{result.participant_email || "—"}</p>
                         </td>
-                        <td className="p-3 text-sm text-muted-foreground hidden sm:table-cell">{result.participant_company || "—"}</td>
+                        <td className="p-3 text-sm text-muted-foreground hidden sm:table-cell">
+                          <p>{result.participant_company || "—"}</p>
+                          <p className="text-[11px]">{result.participant_role || "—"}</p>
+                        </td>
                         <td className="p-3">
                           <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ backgroundColor: TYPE_COLORS[result.dominant_type] || "#6366f1" }}>
-                            T{result.dominant_type} — {TYPE_NAMES[result.dominant_type] || "—"}
+                            T{result.dominant_type} - {TYPE_NAMES[result.dominant_type] || "—"}
                           </span>
                         </td>
                         <td className="p-3 text-sm font-medium text-foreground hidden md:table-cell">{result.confidence_level || 0}%</td>
@@ -339,7 +517,7 @@ export default function Admin() {
             <div className="p-4 border-b border-border flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-heading text-sm font-semibold text-foreground">Candidatos cadastrados sem resultado</h2>
-                <p className="text-xs text-muted-foreground">Pessoas que estão no banco, mas ainda não finalizaram o teste</p>
+                <p className="text-xs text-muted-foreground">Pessoas que estao no banco, mas ainda nao finalizaram o teste</p>
               </div>
               <span className="text-xs text-muted-foreground">{filteredPending.length} encontrado(s)</span>
             </div>
@@ -351,7 +529,7 @@ export default function Admin() {
                     <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden sm:table-cell">Empresa/Cargo</th>
                     <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground hidden md:table-cell">Telefone</th>
                     <th className="text-left p-3 text-[11px] font-semibold text-muted-foreground">Status</th>
-                    <th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Ação</th>
+                    <th className="text-right p-3 text-[11px] font-semibold text-muted-foreground">Acao</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -374,7 +552,7 @@ export default function Admin() {
                           <td className="p-3">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${started ? "bg-amber-500/15 text-amber-300" : "bg-muted text-muted-foreground"}`}>
                               {started ? <Clock className="w-3 h-3" /> : <UserRound className="w-3 h-3" />}
-                              {started ? "Iniciado" : "Só cadastrado"}
+                              {started ? "Iniciado" : "So cadastrado"}
                             </span>
                           </td>
                           <td className="p-3 text-right">
@@ -400,7 +578,7 @@ export default function Admin() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-60 bg-sidebar border-r border-sidebar-border p-5">
             <div className="flex items-center justify-between mb-8">
-              <span className="font-display text-base font-semibold text-foreground">Diagnóstico de Liderança</span>
+              <span className="font-display text-base font-semibold text-foreground">Diagnostico de Lideranca</span>
               <button onClick={() => setSidebarOpen(false)}><X className="w-5 h-5 text-muted-foreground" /></button>
             </div>
             <nav className="space-y-0.5">
@@ -431,9 +609,9 @@ function MetricCard({ icon: Icon, label, value }) {
 
 function SummaryLine({ label, value }) {
   return (
-    <div className="flex items-center justify-between border-b border-border/50 pb-2 last:border-0 last:pb-0">
+    <div className="flex items-center justify-between border-b border-border/50 pb-2 last:border-0 last:pb-0 gap-4">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-semibold text-foreground">{value}</span>
+      <span className="font-semibold text-foreground text-right">{value}</span>
     </div>
   );
 }

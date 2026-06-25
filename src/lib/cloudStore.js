@@ -129,3 +129,24 @@ export async function deleteResult(id) {
     method: "DELETE"
   });
 }
+
+export async function filterPerformanceReviews(filter = {}, sort, limit) {
+  return apiRequest(`/api/performance-reviews${queryString(filter, sort, limit)}`);
+}
+
+export async function getPerformanceReview(id) {
+  return apiRequest(`/api/performance-reviews/${encodeURIComponent(id)}`);
+}
+
+export async function upsertPerformanceReview(data) {
+  return apiRequest("/api/performance-reviews", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deletePerformanceReview(id) {
+  return apiRequest(`/api/performance-reviews/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}

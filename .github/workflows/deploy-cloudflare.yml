@@ -38,4 +38,6 @@ jobs:
           echo "Config: wrangler.toml"
 
       - name: Deploy to Cloudflare Workers
-        run: npx --yes wrangler@3.90.0 deploy
+        run: npx --yes wrangler@4.105.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

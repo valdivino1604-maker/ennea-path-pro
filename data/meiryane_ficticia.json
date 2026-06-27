@@ -1,0 +1,47 @@
+{
+  "participant": {
+    "id": "participant_meiryane_ficticia",
+    "full_name": "Meiryane",
+    "email": "meiryane.ficticia@ennea.local",
+    "phone": "",
+    "company": "",
+    "role": "",
+    "birth_date": "",
+    "gender": "",
+    "plan": "premium",
+    "answers": {},
+    "current_index": 0,
+    "status": "ficticio_para_recuperacao"
+  },
+  "result": {
+    "id": "result_340f5ea9-d9e7-4385-9cec-ac05371eea6a",
+    "participant_id": "participant_meiryane_ficticia",
+    "participant_name": "Meiryane",
+    "participant_email": "meiryane.ficticia@ennea.local",
+    "participant_company": "",
+    "participant_role": "",
+    "participant_birth_date": "",
+    "plan": "premium",
+    "answers": {},
+    "scores": {
+      "1": 10,
+      "2": 12,
+      "3": 18,
+      "4": 15,
+      "5": 22,
+      "6": 20,
+      "7": 30,
+      "8": 98,
+      "9": 35
+    },
+    "dominant_type": 8,
+    "dominant_type_name": "O Desafiador",
+    "wing": "",
+    "wing_name": "",
+    "confidence_level": 98,
+    "duration_seconds": 0,
+    "completed": true
+  },
+  "result_url": "https://ennea-path-pro1515.valdivino1604.workers.dev/results/result_340f5ea9-d9e7-4385-9cec-ac05371eea6a",
+  "observacao": "Registro ficticio criado para recuperar visualizacao da Meiryane quando nao houver backup do D1."
+}
